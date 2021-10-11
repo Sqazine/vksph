@@ -4,6 +4,7 @@
 #include <vector>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_vulkan.h>
+#include <string_view>
 #define VK_CHECK(x)                                                     \
     do                                                                  \
     {                                                                   \
@@ -14,6 +15,8 @@
             abort();                                                    \
         }                                                               \
     } while (0);
+
+
 struct QueueFamilyIndices
 {
 	std::optional<uint32_t> graphicsFamily;
@@ -43,13 +46,15 @@ struct SwapChainSupportDetails
 
 std::vector<VkLayerProperties> GetInstanceLayerProps();
 std::vector<VkExtensionProperties> GetInstanceExtensionProps();
+bool CheckValidationLayerSupport(std::vector<const char*> validationLayerNames, std::vector<VkLayerProperties> instanceLayerProps);
+bool CheckExtensionSupport(std::vector<const char*> extensionNames, std::vector<VkExtensionProperties> extensionProps);
+
 
 std::vector<VkExtensionProperties> GetPhysicalDeviceExtensionProps(VkPhysicalDevice device);
 VkPhysicalDeviceProperties GetPhysicalDeviceProps(VkPhysicalDevice device);
 VkPhysicalDeviceMemoryProperties GetPhysicalDeviceMemoryProps(VkPhysicalDevice device);
 VkPhysicalDeviceFeatures GetPhysicalDeviceFeatures(VkPhysicalDevice device);
 
-bool CheckValidationLayerSupport(std::vector<const char*> validationLayerNames, std::vector<VkLayerProperties> instanceLayerProps);
 QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface);
 SwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface);
 
@@ -59,3 +64,7 @@ VkExtent2D ChooseSwapChainExtent(SDL_Window* window, const VkSurfaceCapabilities
 
 std::vector<VkImage> GetSwapChainImages(VkDevice device, VkSwapchainKHR swapChain);
 std::vector<VkImageView> CreateSwapChainImageViews(VkDevice device, const std::vector<VkImage>& images, VkFormat format);
+
+uint32_t FindMemoryType(VkPhysicalDevice device, uint32_t typeFilter, VkMemoryPropertyFlags properties);
+
+VkShaderModule CreateShaderModuleFromSpirvFile(VkDevice device, std::string_view filePath);

@@ -4,7 +4,7 @@ class Timer
 {
 public:
 	static void Init();
-	static void Update(uint32_t lockFrame = 0);
+	static void CalcFrame(uint32_t lockFrame = 0);
 
 	static float GetDeltaTime();
 
