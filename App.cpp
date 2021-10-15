@@ -530,7 +530,7 @@ void App::CreatePipelineCache()
 	info.initialDataSize = 0;
 	info.pInitialData = nullptr;
 
-	VK_CHECK(vkCreatePipelineCache(m_LogicalDeviceHandle, &info, nullptr, &m_GlobalPipelineCache));
+	VK_CHECK(vkCreatePipelineCache(m_LogicalDeviceHandle, &info, nullptr, &m_GlobalPipelineCacheHandle));
 }
 
 void App::CreatePackedParticleBuffer()
@@ -572,8 +572,8 @@ void App::CreateGraphicsPipelineLayout()
 
 void App::CreateGraphicsPipeline()
 {
-	VkShaderModule vertShaderModule = CreateShaderModuleFromSpirvFile(m_LogicalDeviceHandle, "particle.vert.spv");
-	VkShaderModule fragShaderModule = CreateShaderModuleFromSpirvFile(m_LogicalDeviceHandle, "particle.frag.spv");
+	VkShaderModule vertShaderModule = CreateShaderModuleFromSpirvFile(m_LogicalDeviceHandle, std::string(SHADER_DIR)+"particle.vert.spv");
+	VkShaderModule fragShaderModule = CreateShaderModuleFromSpirvFile(m_LogicalDeviceHandle, std::string(SHADER_DIR)+"particle.frag.spv");
 
 	VkPipelineShaderStageCreateInfo vertStageInfo = {};
 	vertStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -715,7 +715,7 @@ void App::CreateGraphicsPipeline()
 	graphicsPIpelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
 	graphicsPIpelineCreateInfo.basePipelineIndex = -1;
 
-	VK_CHECK(vkCreateGraphicsPipelines(m_LogicalDeviceHandle, m_GlobalPipelineCache, 1, &graphicsPIpelineCreateInfo, nullptr, &m_GraphicePipelineHandle));
+	VK_CHECK(vkCreateGraphicsPipelines(m_LogicalDeviceHandle, m_GlobalPipelineCacheHandle, 1, &graphicsPIpelineCreateInfo, nullptr, &m_GraphicePipelineHandle));
 
 	vkDestroyShaderModule(m_LogicalDeviceHandle, vertShaderModule, nullptr);
 	vkDestroyShaderModule(m_LogicalDeviceHandle, fragShaderModule, nullptr);
@@ -847,6 +847,147 @@ void App::CreateComputeDescriptorSetLayout()
 	VK_CHECK(vkCreateDescriptorSetLayout(m_LogicalDeviceHandle,&descriptorSetLayoutInfo,nullptr, &m_ComputeDescriptorSetLayoutHandle));
 }
 
+void App::UpdateComputeDescriptorSets()
+{
+	VkDescriptorSetAllocateInfo descriptorSetAllocInfo = {};
+	descriptorSetAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	descriptorSetAllocInfo.pNext = nullptr;
+	descriptorSetAllocInfo.pSetLayouts = &m_ComputeDescriptorSetLayoutHandle;
+	descriptorSetAllocInfo.descriptorPool = m_GlobalDescriptorPoolHandle;
+	descriptorSetAllocInfo.descriptorSetCount = 1;
+	
+	VK_CHECK(vkAllocateDescriptorSets(m_LogicalDeviceHandle,&descriptorSetAllocInfo,&m_ComputeDescriptorSetHandle));
+
+	VkDescriptorBufferInfo descriptorBufferInfos[5];
+	descriptorBufferInfos[0].buffer = m_PackedParticlesBufferHandle;
+	descriptorBufferInfos[0].offset = m_PosSsboOffset;
+	descriptorBufferInfos[0].range = m_PosSsboSize;
+
+	descriptorBufferInfos[1].buffer = m_PackedParticlesBufferHandle;
+	descriptorBufferInfos[1].offset = m_VelocitySsboOffset;
+	descriptorBufferInfos[1].range = m_VelocitySsboSize;
+
+	descriptorBufferInfos[2].buffer = m_PackedParticlesBufferHandle;
+	descriptorBufferInfos[2].offset = m_ForceSsboOffset;
+	descriptorBufferInfos[2].range = m_ForceSsboSize;
+
+	descriptorBufferInfos[3].buffer = m_PackedParticlesBufferHandle;
+	descriptorBufferInfos[3].offset = m_DensitySsboOffset;
+	descriptorBufferInfos[3].range = m_DensitySsboSize;
+
+	descriptorBufferInfos[4].buffer = m_PackedParticlesBufferHandle;
+	descriptorBufferInfos[4].offset = m_PressureSsboOffset;
+	descriptorBufferInfos[4].range = m_PressureSsboSize;
+
+	VkWriteDescriptorSet writeDescriptorSets[5];
+	writeDescriptorSets[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	writeDescriptorSets[0].pNext = nullptr;
+	writeDescriptorSets[0].dstSet = m_ComputeDescriptorSetHandle;
+	writeDescriptorSets[0].dstBinding = 0;
+	writeDescriptorSets[0].dstArrayElement = 0;
+	writeDescriptorSets[0].descriptorCount = 1;
+	writeDescriptorSets[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	writeDescriptorSets[0].pImageInfo = nullptr;
+	writeDescriptorSets[0].pBufferInfo = &descriptorBufferInfos[0];
+	writeDescriptorSets[0].pTexelBufferView = nullptr;
+
+	writeDescriptorSets[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	writeDescriptorSets[1].pNext = nullptr;
+	writeDescriptorSets[1].dstSet = m_ComputeDescriptorSetHandle;
+	writeDescriptorSets[1].dstBinding = 0;
+	writeDescriptorSets[1].dstArrayElement = 1;
+	writeDescriptorSets[1].descriptorCount = 1;
+	writeDescriptorSets[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	writeDescriptorSets[1].pImageInfo = nullptr;
+	writeDescriptorSets[1].pBufferInfo = &descriptorBufferInfos[1];
+	writeDescriptorSets[1].pTexelBufferView = nullptr;
+
+	writeDescriptorSets[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	writeDescriptorSets[2].pNext = nullptr;
+	writeDescriptorSets[2].dstSet = m_ComputeDescriptorSetHandle;
+	writeDescriptorSets[2].dstBinding = 0;
+	writeDescriptorSets[2].dstArrayElement = 2;
+	writeDescriptorSets[2].descriptorCount = 1;
+	writeDescriptorSets[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	writeDescriptorSets[2].pImageInfo = nullptr;
+	writeDescriptorSets[2].pBufferInfo = &descriptorBufferInfos[2];
+	writeDescriptorSets[2].pTexelBufferView = nullptr;
+
+	writeDescriptorSets[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	writeDescriptorSets[3].pNext = nullptr;
+	writeDescriptorSets[3].dstSet = m_ComputeDescriptorSetHandle;
+	writeDescriptorSets[3].dstBinding = 0;
+	writeDescriptorSets[3].dstArrayElement = 3;
+	writeDescriptorSets[3].descriptorCount = 1;
+	writeDescriptorSets[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	writeDescriptorSets[3].pImageInfo = nullptr;
+	writeDescriptorSets[3].pBufferInfo = &descriptorBufferInfos[3];
+	writeDescriptorSets[3].pTexelBufferView = nullptr;
+
+	writeDescriptorSets[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	writeDescriptorSets[4].pNext = nullptr;
+	writeDescriptorSets[4].dstSet = m_ComputeDescriptorSetHandle;
+	writeDescriptorSets[4].dstBinding = 0;
+	writeDescriptorSets[4].dstArrayElement = 4;
+	writeDescriptorSets[4].descriptorCount = 1;
+	writeDescriptorSets[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	writeDescriptorSets[4].pImageInfo = nullptr;
+	writeDescriptorSets[4].pBufferInfo = &descriptorBufferInfos[4];
+	writeDescriptorSets[4].pTexelBufferView = nullptr;
+
+	vkUpdateDescriptorSets(m_LogicalDeviceHandle, 5, writeDescriptorSets, 9, nullptr);
+}
+
+void App::CreateComputePipelineLayout()
+{
+	VkPipelineLayoutCreateInfo info;
+	info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	info.pNext = nullptr;
+	info.flags = 0;
+	info.setLayoutCount = 1;
+	info.pSetLayouts = &m_ComputeDescriptorSetLayoutHandle;
+	info.pushConstantRangeCount = 0;
+	info.pPushConstantRanges = nullptr;
+
+	VK_CHECK(vkCreatePipelineLayout(m_LogicalDeviceHandle,&info,nullptr,&m_ComputePipelineLayoutHandle));
+}
+
+void App::CreateComputeComputePipelines()
+{
+	VkShaderModule computeDensityPressureShaderModule = CreateShaderModuleFromSpirvFile(m_LogicalDeviceHandle,std::string(SHADER_DIR)+"density_pressure.comp.spv");
+
+	VkPipelineShaderStageCreateInfo computeShaderStageCreateInfo{};
+	computeShaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	computeShaderStageCreateInfo.pNext = nullptr;
+	computeShaderStageCreateInfo.flags = 0;
+	computeShaderStageCreateInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+	computeShaderStageCreateInfo.module = computeDensityPressureShaderModule;
+	computeShaderStageCreateInfo.pName = "main";
+	computeShaderStageCreateInfo.pSpecializationInfo = nullptr;
+
+	VkComputePipelineCreateInfo pipelineInfo{};
+	pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+	pipelineInfo.pNext = nullptr;
+	pipelineInfo.flags = 0;
+	pipelineInfo.stage = computeShaderStageCreateInfo;
+	pipelineInfo.layout = m_ComputePipelineLayoutHandle;
+	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+	pipelineInfo.basePipelineIndex = -1;
+
+	VK_CHECK(vkCreateComputePipelines(m_LogicalDeviceHandle,m_GlobalPipelineCacheHandle,1,&pipelineInfo,nullptr,&m_ComputePipelineHandles[0]));
+
+	VkShaderModule computeForceShaderModule = CreateShaderModuleFromSpirvFile(m_LogicalDeviceHandle, std::string(SHADER_DIR) + "force.comp.spv");
+	
+	computeShaderStageCreateInfo.module = computeForceShaderModule;
+	pipelineInfo.stage = computeShaderStageCreateInfo;
+
+}
+
+void App::DestroyComputePipelineLayout()
+{
+	vkDestroyPipelineLayout(m_LogicalDeviceHandle, m_ComputePipelineLayoutHandle, nullptr);
+}
+
 void App::DestroyComputeDescriptorSetLayout()
 {
 	vkDestroyDescriptorSetLayout(m_LogicalDeviceHandle, m_ComputeDescriptorSetLayoutHandle, nullptr);
@@ -886,7 +1027,7 @@ void App::DestroyPackedParticleBuffer()
 
 void App::DestroyPipelineCache()
 {
-	vkDestroyPipelineCache(m_LogicalDeviceHandle, m_GlobalPipelineCache, nullptr);
+	vkDestroyPipelineCache(m_LogicalDeviceHandle, m_GlobalPipelineCacheHandle, nullptr);
 }
 
 void App::DestroyDescriptorPool()

@@ -62,7 +62,12 @@ private:
 	void CreateGraphicsCommandBuffers();
 	void CreateSemaphores();
 	void CreateComputeDescriptorSetLayout();
+	void UpdateComputeDescriptorSets();
+	void CreateComputePipelineLayout();
+	void CreateComputeComputePipelines();
 
+	void DestroyComputePipelines();
+	void DestroyComputePipelineLayout();
 	void DestroyComputeDescriptorSetLayout();
 	void DestroySemaphore();
 	void DestroyGraphicsCommandBuffers();
@@ -114,7 +119,7 @@ private:
 	std::vector<VkFramebuffer> m_SwapChainFrameBufferHandles;
 
 	VkDescriptorPool m_GlobalDescriptorPoolHandle;
-	VkPipelineCache m_GlobalPipelineCache;
+	VkPipelineCache m_GlobalPipelineCacheHandle;
 
 	VkBuffer m_PackedParticlesBufferHandle;
 	VkDeviceMemory m_PackedParticleBufferMemoryHandle;
@@ -129,6 +134,10 @@ private:
 	VkSemaphore m_RenderFinishedSemaphoreHandle;
 
 	VkDescriptorSetLayout m_ComputeDescriptorSetLayoutHandle;
+	VkDescriptorSet m_ComputeDescriptorSetHandle;
+	VkPipelineLayout m_ComputePipelineLayoutHandle;
+	VkPipeline m_ComputePipelineHandles[3];
+
 
 	const uint64_t m_PosSsboSize = sizeof(glm::vec2) * PARTICLE_NUM;
 	const uint64_t m_VelocitySsboSize = sizeof(glm::vec2) * PARTICLE_NUM;
