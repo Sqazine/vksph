@@ -64,8 +64,17 @@ private:
 	void CreateComputeDescriptorSetLayout();
 	void UpdateComputeDescriptorSets();
 	void CreateComputePipelineLayout();
-	void CreateComputeComputePipelines();
+	void CreateComputePipelines();
+	void CreateComputeCommandPool();
+	void CreateComputeCommandBuffer();
 
+	void CreateSubmitInfo();
+	void CreatePresentInfo();
+
+	void InitParticleData(int32_t cases=1);
+
+	void DestroyCommandBuffer();
+	void DestroyComputeCommandPool();
 	void DestroyComputePipelines();
 	void DestroyComputePipelineLayout();
 	void DestroyComputeDescriptorSetLayout();
@@ -103,9 +112,9 @@ private:
 
 	QueueFamilyIndices m_QueueIndices;
 	VkDevice m_LogicalDeviceHandle;
-	VkQueue m_GraphicsQueue;
-	VkQueue m_PresentQueue;
-	VkQueue m_ComputeQueue;
+	VkQueue m_GraphicsQueueHandle;
+	VkQueue m_PresentQueueHandle;
+	VkQueue m_ComputeQueueHandle;
 
 	SwapChainSupportDetails m_SwapChainSupportDetails;
 	VkSwapchainKHR m_SwapChainHandle;
@@ -138,6 +147,17 @@ private:
 	VkPipelineLayout m_ComputePipelineLayoutHandle;
 	VkPipeline m_ComputePipelineHandles[3];
 
+	VkCommandPool m_ComputeCommandPoolHandle;
+	VkCommandBuffer m_ComputeCommandBufferHandle;
+
+	VkPipelineStageFlags waitDstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+	VkSubmitInfo m_ComputeSubmitInfo;
+	VkSubmitInfo m_GraphicsSubmitInfo;
+
+	VkPresentInfoKHR m_PresentInfo;
+
+	uint32_t m_SwapChainImageIndex=0;
 
 	const uint64_t m_PosSsboSize = sizeof(glm::vec2) * PARTICLE_NUM;
 	const uint64_t m_VelocitySsboSize = sizeof(glm::vec2) * PARTICLE_NUM;
