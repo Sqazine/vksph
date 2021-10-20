@@ -8,6 +8,7 @@
 #include <glm/glm.hpp>
 #include <deque>
 #include <functional>
+#include <array>
 #include "VulkanUtils.h"
 
 #define PARTICLE_NUM 20000
@@ -59,7 +60,6 @@ public:
 	void Run();
 private:
 	void Init();
-	void ProcessInput();
 	void Update();
 	void Draw();
 
@@ -91,20 +91,7 @@ private:
 	void CreateSubmitInfo();
 	void CreatePresentInfo();
 
-	void InitParticleData(int32_t cases=1);
-
-	void DestroyCommandBuffer();
-	void DestroyComputeCommandPool();
-	void DestroyComputePipelines();
-	void DestroyComputePipelineLayout();
-	void DestroyComputeDescriptorSetLayout();
-	void DestroySemaphore();
-	void DestroyGraphicsCommandBuffers();
-	void DestroyGraphicsCommandPool();
-	void DestroyGraphicsPipeline();
-	void DestroyGraphicsPipelineLayout();	
-	void DestroyPackedParticleBuffer();
-	void DestroyPipelineCache();
+	void InitParticleData(std::array<glm::vec2,PARTICLE_NUM> initParticlePosition);
 
 	bool m_IsRunning;
 

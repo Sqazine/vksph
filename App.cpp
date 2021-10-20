@@ -76,19 +76,6 @@ App::~App()
 {
 	vkDeviceWaitIdle(m_LogicalDeviceHandle);
 
-	DestroyCommandBuffer();
-	DestroyComputeCommandPool();
-	DestroyComputePipelines();
-	DestroyComputePipelineLayout();
-	DestroyComputeDescriptorSetLayout();
-	DestroySemaphore();
-	DestroyGraphicsCommandBuffers();
-	DestroyGraphicsCommandPool();
-	DestroyGraphicsPipeline();
-	DestroyGraphicsPipelineLayout();
-	DestroyPackedParticleBuffer();
-	DestroyPipelineCache();
-
 	m_DeletionQueue.Flush();
 
 	SDL_Quit();
@@ -99,9 +86,8 @@ void App::Run()
 	Init();
 	while (m_IsRunning)
 	{
-		Timer::CalcFrame();
+		Timer::CalcFrame(60);
 
-		ProcessInput();
 		Update();
 		Draw();
 	}
@@ -113,11 +99,16 @@ void App::Init()
 		SDL_Log("failed to init SDL!");
 
 #if _DEBUG
-	system("glslangValidator -V ..\\shaders\\particle.vert -o particle.vert.spv");
-	system("glslangValidator -V ..\\shaders\\particle.frag -o particle.frag.spv");
-	system("glslangValidator -V ..\\shaders\\density_pressure.comp -o density_pressure.comp.spv");
-	system("glslangValidator -V ..\\shaders\\force.comp -o force.comp.spv");
-	system("glslangValidator -V ..\\shaders\\integrate.comp -o integrate.comp.spv");
+	std::string str = "glslangValidator -V " + std::string(SHADER_DIR) + "particle.vert -o particle.vert.spv";
+	system(str.c_str());
+	str = "glslangValidator -V " + std::string(SHADER_DIR) + "particle.frag -o particle.frag.spv";
+	system(str.c_str());
+	str = "glslangValidator -V " + std::string(SHADER_DIR) + "density_pressure.comp -o density_pressure.comp.spv";
+	system(str.c_str());
+	str = "glslangValidator -V " + std::string(SHADER_DIR) + "force.comp -o force.comp.spv";
+	system(str.c_str());
+	str = "glslangValidator -V " + std::string(SHADER_DIR) + "integrate.comp -o integrate.comp.spv";
+	system(str.c_str());
 #endif
 
 	CreateWindow(m_WindowCreateInfo);
@@ -150,12 +141,24 @@ void App::Init()
 	CreateSubmitInfo();
 	CreatePresentInfo();
 
-	InitParticleData();
-
 	Timer::Init();
+
+	std::array<glm::vec2, PARTICLE_NUM> initParticlePosition;
+	for (auto i = 0, x = 0, y = 0; i < PARTICLE_NUM; ++i)
+	{
+		initParticlePosition[i].x = -0.625f + PARTICLE_RADIUS * 2 * x;
+		initParticlePosition[i].y = -1 + PARTICLE_RADIUS * 2 * y;
+		x++;
+		if (x >= 125)
+		{
+			x = 0;
+			y++;
+		}
+	}
+	InitParticleData(initParticlePosition);
 }
 
-void App::ProcessInput()
+void App::Update()
 {
 	SDL_Event event;
 	if (SDL_PollEvent(&event))
@@ -171,15 +174,55 @@ void App::ProcessInput()
 		m_IsRunning = false;
 
 	if (keyboardState[SDL_SCANCODE_1])
-		InitParticleData(1);
+	{
+		std::array<glm::vec2, PARTICLE_NUM> initParticlePosition;
+		for (auto i = 0, x = 0, y = 0; i < PARTICLE_NUM; ++i)
+		{
+			initParticlePosition[i].x = -0.625f + PARTICLE_RADIUS * 2 * x;
+			initParticlePosition[i].y = -1 + PARTICLE_RADIUS * 2 * y;
+			x++;
+			if (x >= 125)
+			{
+				x = 0;
+				y++;
+			}
+		}
+		InitParticleData(initParticlePosition);
+	}
 	if (keyboardState[SDL_SCANCODE_2])
-		InitParticleData(2);
+	{
+		std::array<glm::vec2, PARTICLE_NUM> initParticlePosition;
+		for (auto i = 0, x = 0, y = 0; i < PARTICLE_NUM; ++i)
+		{
+			initParticlePosition[i].x = -1 + PARTICLE_RADIUS * 2 * x;
+			initParticlePosition[i].y = 1 - PARTICLE_RADIUS * 2 * y;
+			x++;
+			if (x >= 100)
+			{
+				x = 0;
+				y++;
+			}
+		}
+		InitParticleData(initParticlePosition);
+	}
 	if (keyboardState[SDL_SCANCODE_3])
-		InitParticleData(3);
-}
+	{
+		std::array<glm::vec2, PARTICLE_NUM> initParticlePosition;
+		for (auto i = 0, x = 0, y = 0; i < PARTICLE_NUM; ++i)
+		{
+			initParticlePosition[i].x = 1 - PARTICLE_RADIUS * 2 * x;
+			initParticlePosition[i].y = -1 + PARTICLE_RADIUS * 2 * y;
+			x++;
+			if (x >= 100)
+			{
+				x = 0;
+				y++;
+			}
+		}
+		InitParticleData(initParticlePosition);
+	}
 
-void App::Update()
-{
+	//update particle
 	VK_CHECK(vkQueueSubmit(m_ComputeQueueHandle, 1, &m_ComputeSubmitInfo, VK_NULL_HANDLE));
 }
 
@@ -207,9 +250,8 @@ void App::CreateWindow(const WindowCreateInfo &info)
 									  info.height,
 									  windowFlag);
 
-	m_DeletionQueue.Add([=](){
-		SDL_DestroyWindow(m_WindowHandle);
-	});
+	m_DeletionQueue.Add([=]()
+						{ SDL_DestroyWindow(m_WindowHandle); });
 }
 
 void App::LoadVulkanLib()
@@ -231,9 +273,8 @@ void App::LoadVulkanLib()
 		exit(1);
 	}
 
-	m_DeletionQueue.Add([=](){
-		SDL_Vulkan_UnloadLibrary();
-	});
+	m_DeletionQueue.Add([=]()
+						{ SDL_Vulkan_UnloadLibrary(); });
 }
 
 void App::CreateInstance()
@@ -286,9 +327,8 @@ void App::CreateInstance()
 
 	VK_CHECK(vkCreateInstance(&instanceInfo, nullptr, &m_InstanceHandle));
 
-	m_DeletionQueue.Add([=](){
-			vkDestroyInstance(m_InstanceHandle, nullptr);
-	});
+	m_DeletionQueue.Add([=]()
+						{ vkDestroyInstance(m_InstanceHandle, nullptr); });
 }
 
 void App::CreateDebugUtilsMessenger()
@@ -305,9 +345,8 @@ void App::CreateDebugUtilsMessenger()
 	if (CreateDebugUtilsMessengerEXT(m_InstanceHandle, &createInfo, nullptr, &m_DebugMessengerHandle) != VK_SUCCESS)
 		std::cout << "Failed to create debug messenger" << std::endl;
 
-	m_DeletionQueue.Add([=](){
-		DestroyDebugUtilsMessengerEXT(m_InstanceHandle, m_DebugMessengerHandle, nullptr);
-	});
+	m_DeletionQueue.Add([=]()
+						{ DestroyDebugUtilsMessengerEXT(m_InstanceHandle, m_DebugMessengerHandle, nullptr); });
 }
 
 void App::CreateSurface()
@@ -315,9 +354,8 @@ void App::CreateSurface()
 	if (SDL_Vulkan_CreateSurface(m_WindowHandle, m_InstanceHandle, &m_SurfaceHandle) != SDL_TRUE)
 		std::cout << "Failed to create vulkan surface:" << SDL_GetError() << std::endl;
 
-	m_DeletionQueue.Add([=](){
-		vkDestroySurfaceKHR(m_InstanceHandle, m_SurfaceHandle, nullptr);
-	});
+	m_DeletionQueue.Add([=]()
+						{ vkDestroySurfaceKHR(m_InstanceHandle, m_SurfaceHandle, nullptr); });
 }
 
 void App::SelectPhysicalDevice()
@@ -442,9 +480,8 @@ void App::CreateLogicalDevice()
 	vkGetDeviceQueue(m_LogicalDeviceHandle, m_QueueIndices.presentFamily.value(), 0, &m_PresentQueueHandle);
 	vkGetDeviceQueue(m_LogicalDeviceHandle, m_QueueIndices.computeFamily.value(), 0, &m_ComputeQueueHandle);
 
-	m_DeletionQueue.Add([=](){
-		vkDestroyDevice(m_LogicalDeviceHandle, nullptr);
-	});
+	m_DeletionQueue.Add([=]()
+						{ vkDestroyDevice(m_LogicalDeviceHandle, nullptr); });
 }
 
 void App::CreateSwapChain()
@@ -500,11 +537,12 @@ void App::CreateSwapChain()
 	m_SwapChainExtent = extent;
 	m_SwapChainImageViews = CreateSwapChainImageViews(m_LogicalDeviceHandle, m_SwapChainImages, m_SwapChainImageFormat);
 
-	m_DeletionQueue.Add([=](){
-		for (auto imageView : m_SwapChainImageViews)
-		vkDestroyImageView(m_LogicalDeviceHandle, imageView, nullptr);
-	vkDestroySwapchainKHR(m_LogicalDeviceHandle, m_SwapChainHandle, nullptr);
-	});
+	m_DeletionQueue.Add([=]()
+						{
+							for (auto imageView : m_SwapChainImageViews)
+								vkDestroyImageView(m_LogicalDeviceHandle, imageView, nullptr);
+							vkDestroySwapchainKHR(m_LogicalDeviceHandle, m_SwapChainHandle, nullptr);
+						});
 }
 
 void App::CreateRenderPass()
@@ -537,9 +575,8 @@ void App::CreateRenderPass()
 
 	VK_CHECK(vkCreateRenderPass(m_LogicalDeviceHandle, &renderPassInfo, nullptr, &m_RenderPassHandle));
 
-	m_DeletionQueue.Add([=](){
-		vkDestroyRenderPass(m_LogicalDeviceHandle, m_RenderPassHandle, nullptr);
-	});
+	m_DeletionQueue.Add([=]()
+						{ vkDestroyRenderPass(m_LogicalDeviceHandle, m_RenderPassHandle, nullptr); });
 }
 
 void App::CreateSwapChainFrameBuffers()
@@ -562,10 +599,11 @@ void App::CreateSwapChainFrameBuffers()
 		VK_CHECK(vkCreateFramebuffer(m_LogicalDeviceHandle, &info, nullptr, &m_SwapChainFrameBufferHandles[i]));
 	}
 
-	m_DeletionQueue.Add([=](){
-		for (auto fb : m_SwapChainFrameBufferHandles)
-		vkDestroyFramebuffer(m_LogicalDeviceHandle, fb, nullptr);
-	});
+	m_DeletionQueue.Add([=]()
+						{
+							for (auto fb : m_SwapChainFrameBufferHandles)
+								vkDestroyFramebuffer(m_LogicalDeviceHandle, fb, nullptr);
+						});
 }
 
 void App::CreateDescriptorPool()
@@ -584,9 +622,8 @@ void App::CreateDescriptorPool()
 
 	VK_CHECK(vkCreateDescriptorPool(m_LogicalDeviceHandle, &poolInfo, nullptr, &m_GlobalDescriptorPoolHandle));
 
-	m_DeletionQueue.Add([=](){
-		vkDestroyDescriptorPool(m_LogicalDeviceHandle,m_GlobalDescriptorPoolHandle,nullptr);
-	});
+	m_DeletionQueue.Add([=]()
+						{ vkDestroyDescriptorPool(m_LogicalDeviceHandle, m_GlobalDescriptorPoolHandle, nullptr); });
 }
 
 void App::CreatePipelineCache()
@@ -599,6 +636,9 @@ void App::CreatePipelineCache()
 	info.pInitialData = nullptr;
 
 	VK_CHECK(vkCreatePipelineCache(m_LogicalDeviceHandle, &info, nullptr, &m_GlobalPipelineCacheHandle));
+
+	m_DeletionQueue.Add([=]()
+						{ vkDestroyPipelineCache(m_LogicalDeviceHandle, m_GlobalPipelineCacheHandle, nullptr); });
 }
 
 void App::CreatePackedParticleBuffer()
@@ -624,6 +664,12 @@ void App::CreatePackedParticleBuffer()
 	VK_CHECK(vkAllocateMemory(m_LogicalDeviceHandle, &allocInfo, nullptr, &m_PackedParticleBufferMemoryHandle));
 
 	vkBindBufferMemory(m_LogicalDeviceHandle, m_PackedParticlesBufferHandle, m_PackedParticleBufferMemoryHandle, 0);
+
+	m_DeletionQueue.Add([=]()
+						{
+							vkDestroyBuffer(m_LogicalDeviceHandle, m_PackedParticlesBufferHandle, nullptr);
+							vkFreeMemory(m_LogicalDeviceHandle, m_PackedParticleBufferMemoryHandle, nullptr);
+						});
 }
 
 void App::CreateGraphicsPipelineLayout()
@@ -638,6 +684,9 @@ void App::CreateGraphicsPipelineLayout()
 	info.pPushConstantRanges = nullptr;
 
 	VK_CHECK(vkCreatePipelineLayout(m_LogicalDeviceHandle, &info, nullptr, &m_GraphicsPipelineLayoutHandle));
+
+	m_DeletionQueue.Add([=]()
+						{ vkDestroyPipelineLayout(m_LogicalDeviceHandle, m_GraphicsPipelineLayoutHandle, nullptr); });
 }
 
 void App::CreateGraphicsPipeline()
@@ -789,6 +838,9 @@ void App::CreateGraphicsPipeline()
 
 	vkDestroyShaderModule(m_LogicalDeviceHandle, vertShaderModule, nullptr);
 	vkDestroyShaderModule(m_LogicalDeviceHandle, fragShaderModule, nullptr);
+
+	m_DeletionQueue.Add([=]()
+						{ vkDestroyPipeline(m_LogicalDeviceHandle, m_GraphicePipelineHandle, nullptr); });
 }
 
 void App::CreateGraphicsCommandPool()
@@ -800,6 +852,9 @@ void App::CreateGraphicsCommandPool()
 	info.queueFamilyIndex = m_QueueIndices.graphicsFamily.value();
 
 	VK_CHECK(vkCreateCommandPool(m_LogicalDeviceHandle, &info, nullptr, &m_GraphicsCommandPoolHandle));
+
+	m_DeletionQueue.Add([=]()
+						{ vkDestroyCommandPool(m_LogicalDeviceHandle, m_GraphicsCommandPoolHandle, nullptr); });
 }
 
 void App::CreateGraphicsCommandBuffers()
@@ -859,6 +914,9 @@ void App::CreateGraphicsCommandBuffers()
 
 		VK_CHECK(vkEndCommandBuffer(m_GraphicsCommandBufferHandles[i]));
 	}
+
+	m_DeletionQueue.Add([=]()
+						{ vkFreeCommandBuffers(m_LogicalDeviceHandle, m_GraphicsCommandPoolHandle, m_GraphicsCommandBufferHandles.size(), m_GraphicsCommandBufferHandles.data()); });
 }
 
 void App::CreateSemaphores()
@@ -870,6 +928,12 @@ void App::CreateSemaphores()
 
 	VK_CHECK(vkCreateSemaphore(m_LogicalDeviceHandle, &info, nullptr, &m_ImageAvailableSemaphoreHandle));
 	VK_CHECK(vkCreateSemaphore(m_LogicalDeviceHandle, &info, nullptr, &m_RenderFinishedSemaphoreHandle));
+
+	m_DeletionQueue.Add([=]()
+						{
+							vkDestroySemaphore(m_LogicalDeviceHandle, m_RenderFinishedSemaphoreHandle, nullptr);
+							vkDestroySemaphore(m_LogicalDeviceHandle, m_ImageAvailableSemaphoreHandle, nullptr);
+						});
 }
 
 void App::CreateComputeDescriptorSetLayout()
@@ -914,6 +978,9 @@ void App::CreateComputeDescriptorSetLayout()
 	descriptorSetLayoutInfo.pBindings = descriptorSetLayoutBindings;
 
 	VK_CHECK(vkCreateDescriptorSetLayout(m_LogicalDeviceHandle, &descriptorSetLayoutInfo, nullptr, &m_ComputeDescriptorSetLayoutHandle));
+
+	m_DeletionQueue.Add([=]()
+						{ vkDestroyDescriptorSetLayout(m_LogicalDeviceHandle, m_ComputeDescriptorSetLayoutHandle, nullptr); });
 }
 
 void App::UpdateComputeDescriptorSets()
@@ -1019,6 +1086,9 @@ void App::CreateComputePipelineLayout()
 	info.pPushConstantRanges = nullptr;
 
 	VK_CHECK(vkCreatePipelineLayout(m_LogicalDeviceHandle, &info, nullptr, &m_ComputePipelineLayoutHandle));
+
+	m_DeletionQueue.Add([=]()
+						{ vkDestroyPipelineLayout(m_LogicalDeviceHandle, m_ComputePipelineLayoutHandle, nullptr); });
 }
 
 void App::CreateComputePipelines()
@@ -1060,6 +1130,12 @@ void App::CreateComputePipelines()
 	vkDestroyShaderModule(m_LogicalDeviceHandle, computeIntegrateShaderModule, nullptr);
 	vkDestroyShaderModule(m_LogicalDeviceHandle, computeForceShaderModule, nullptr);
 	vkDestroyShaderModule(m_LogicalDeviceHandle, computeDensityPressureShaderModule, nullptr);
+
+	m_DeletionQueue.Add([=]()
+						{
+							for (const auto &compPipe : m_ComputePipelineHandles)
+								vkDestroyPipeline(m_LogicalDeviceHandle, compPipe, nullptr);
+						});
 }
 
 void App::CreateComputeCommandPool()
@@ -1071,6 +1147,9 @@ void App::CreateComputeCommandPool()
 	info.queueFamilyIndex = m_QueueIndices.computeFamily.value();
 
 	VK_CHECK(vkCreateCommandPool(m_LogicalDeviceHandle, &info, nullptr, &m_ComputeCommandPoolHandle));
+
+	m_DeletionQueue.Add([=]()
+						{ vkDestroyCommandPool(m_LogicalDeviceHandle, m_ComputeCommandPoolHandle, nullptr); });
 }
 
 void App::CreateComputeCommandBuffer()
@@ -1107,6 +1186,9 @@ void App::CreateComputeCommandBuffer()
 	vkCmdPipelineBarrier(m_ComputeCommandBufferHandle, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 0, nullptr);
 
 	vkEndCommandBuffer(m_ComputeCommandBufferHandle);
+
+	m_DeletionQueue.Add([=]()
+						{ vkFreeCommandBuffers(m_LogicalDeviceHandle, m_ComputeCommandPoolHandle, 1, &m_ComputeCommandBufferHandle); });
 }
 
 void App::CreateSubmitInfo()
@@ -1144,7 +1226,7 @@ void App::CreatePresentInfo()
 	m_PresentInfo.pResults = nullptr;
 }
 
-void App::InitParticleData(int32_t cases)
+void App::InitParticleData(std::array<glm::vec2, PARTICLE_NUM> initParticlePosition)
 {
 	VkBuffer stagingBufferHandle = VK_NULL_HANDLE;
 	VkDeviceMemory stagingBufferDeviceMemoryHandle = VK_NULL_HANDLE;
@@ -1181,51 +1263,6 @@ void App::InitParticleData(int32_t cases)
 
 	void *mappedMemory = nullptr;
 	vkMapMemory(m_LogicalDeviceHandle, stagingBufferDeviceMemoryHandle, 0, stagingBufferMemoryRequirements.size, 0, &mappedMemory);
-
-	std::vector<glm::vec2> initParticlePosition(PARTICLE_NUM);
-
-	if (cases == 1)
-	{
-		for (auto i = 0, x = 0, y = 0; i < PARTICLE_NUM; ++i)
-		{
-			initParticlePosition[i].x = -0.625f + PARTICLE_RADIUS * 2 * x;
-			initParticlePosition[i].y = -1 + PARTICLE_RADIUS * 2 * y;
-			x++;
-			if (x >= 125)
-			{
-				x = 0;
-				y++;
-			}
-		}
-	}
-	else if (cases == 2)
-	{
-		for (auto i = 0, x = 0, y = 0; i < PARTICLE_NUM; ++i)
-		{
-			initParticlePosition[i].x = -1 + PARTICLE_RADIUS * 2 * x;
-			initParticlePosition[i].y = 1 - PARTICLE_RADIUS * 2 * y;
-			x++;
-			if (x >= 100)
-			{
-				x = 0;
-				y++;
-			}
-		}
-	}
-	else if (cases == 3)
-	{
-		for (auto i = 0, x = 0, y = 0; i < PARTICLE_NUM; ++i)
-		{
-			initParticlePosition[i].x = 1 - PARTICLE_RADIUS * 2 * x;
-			initParticlePosition[i].y = -1 + PARTICLE_RADIUS * 2 * y;
-			x++;
-			if (x >= 100)
-			{
-				x = 0;
-				y++;
-			}
-		}
-	}
 
 	std::memset(mappedMemory, 0, m_PackedBufferSize);
 	std::memcpy(mappedMemory, initParticlePosition.data(), m_PosSsboSize);
@@ -1275,67 +1312,4 @@ void App::InitParticleData(int32_t cases)
 	vkFreeCommandBuffers(m_LogicalDeviceHandle, m_ComputeCommandPoolHandle, 1, &copyCommandBufferHandle);
 	vkFreeMemory(m_LogicalDeviceHandle, stagingBufferDeviceMemoryHandle, nullptr);
 	vkDestroyBuffer(m_LogicalDeviceHandle, stagingBufferHandle, nullptr);
-}
-
-void App::DestroyCommandBuffer()
-{
-	vkFreeCommandBuffers(m_LogicalDeviceHandle, m_ComputeCommandPoolHandle, 1, &m_ComputeCommandBufferHandle);
-}
-
-void App::DestroyComputeCommandPool()
-{
-	vkDestroyCommandPool(m_LogicalDeviceHandle, m_ComputeCommandPoolHandle, nullptr);
-}
-
-void App::DestroyComputePipelines()
-{
-	for (const auto &compPipe : m_ComputePipelineHandles)
-		vkDestroyPipeline(m_LogicalDeviceHandle, compPipe, nullptr);
-}
-
-void App::DestroyComputePipelineLayout()
-{
-	vkDestroyPipelineLayout(m_LogicalDeviceHandle, m_ComputePipelineLayoutHandle, nullptr);
-}
-
-void App::DestroyComputeDescriptorSetLayout()
-{
-	vkDestroyDescriptorSetLayout(m_LogicalDeviceHandle, m_ComputeDescriptorSetLayoutHandle, nullptr);
-}
-
-void App::DestroySemaphore()
-{
-	vkDestroySemaphore(m_LogicalDeviceHandle, m_RenderFinishedSemaphoreHandle, nullptr);
-	vkDestroySemaphore(m_LogicalDeviceHandle, m_ImageAvailableSemaphoreHandle, nullptr);
-}
-
-void App::DestroyGraphicsCommandBuffers()
-{
-	vkFreeCommandBuffers(m_LogicalDeviceHandle, m_GraphicsCommandPoolHandle, m_GraphicsCommandBufferHandles.size(), m_GraphicsCommandBufferHandles.data());
-}
-
-void App::DestroyGraphicsCommandPool()
-{
-	vkDestroyCommandPool(m_LogicalDeviceHandle, m_GraphicsCommandPoolHandle, nullptr);
-}
-
-void App::DestroyGraphicsPipeline()
-{
-	vkDestroyPipeline(m_LogicalDeviceHandle, m_GraphicePipelineHandle, nullptr);
-}
-
-void App::DestroyGraphicsPipelineLayout()
-{
-	vkDestroyPipelineLayout(m_LogicalDeviceHandle, m_GraphicsPipelineLayoutHandle, nullptr);
-}
-
-void App::DestroyPackedParticleBuffer()
-{
-	vkDestroyBuffer(m_LogicalDeviceHandle, m_PackedParticlesBufferHandle, nullptr);
-	vkFreeMemory(m_LogicalDeviceHandle, m_PackedParticleBufferMemoryHandle, nullptr);
-}
-
-void App::DestroyPipelineCache()
-{
-	vkDestroyPipelineCache(m_LogicalDeviceHandle, m_GlobalPipelineCacheHandle, nullptr);
 }
