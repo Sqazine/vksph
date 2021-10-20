@@ -6,6 +6,8 @@
 #include <SDL2/SDL.h>
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
+#include <deque>
+#include <functional>
 #include "VulkanUtils.h"
 
 #define PARTICLE_NUM 20000
@@ -28,6 +30,24 @@ struct WindowCreateInfo
 	int32_t width;
     int32_t height;
 	bool resizeable = false;
+};
+
+struct DeletionQueue
+{
+	std::deque<std::function<void()>> deletors;
+
+	void Add(std::function<void()>&& function)
+	{
+		deletors.emplace_back(function);
+	}
+
+	void Flush()
+	{
+		for (auto it = deletors.rbegin(); it != deletors.rend(); ++it)
+			(*it)();
+
+		deletors.clear();
+	}
 };
 
 class App
@@ -85,16 +105,6 @@ private:
 	void DestroyGraphicsPipelineLayout();	
 	void DestroyPackedParticleBuffer();
 	void DestroyPipelineCache();
-	void DestroyDescriptorPool();
-	void DestroySwapChainFrameBuffers();
-	void DestroyRenderPass();
-	void DestroySwapChain();
-	void DestroyLogicalDevice();
-	void DestroySurface();
-	void DestroyDebugUtilMessenger();
-	void DestroyInstance();
-	void UnLoadVulkanLib();
-	void DestroyWindow();
 
 	bool m_IsRunning;
 
@@ -158,6 +168,8 @@ private:
 	VkPresentInfoKHR m_PresentInfo;
 
 	uint32_t m_SwapChainImageIndex=0;
+
+	DeletionQueue m_DeletionQueue;
 
 	const uint64_t m_PosSsboSize = sizeof(glm::vec2) * PARTICLE_NUM;
 	const uint64_t m_VelocitySsboSize = sizeof(glm::vec2) * PARTICLE_NUM;
