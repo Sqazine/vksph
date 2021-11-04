@@ -14,30 +14,19 @@
 #define PARTICLE_NUM 20000
 #define PARTICLE_RADIUS 0.005f
 #define WORK_GROUP_SIZE 128
-#define WORK_GROUP_NUM ((PARTICLE_NUM+WORK_GROUP_SIZE-1)/WORK_GROUP_SIZE)
+#define WORK_GROUP_NUM ((PARTICLE_NUM + WORK_GROUP_SIZE - 1) / WORK_GROUP_SIZE)
 
-const std::vector<const char*> validationLayers = {
-	"VK_LAYER_KHRONOS_validation"
-};
+const std::vector<const char *> validationLayers = {
+	"VK_LAYER_KHRONOS_validation"};
 
-const std::vector<const char*> deviceExtensions = {
-	VK_KHR_SWAPCHAIN_EXTENSION_NAME
-};
-
-
-struct WindowCreateInfo
-{
-	std::string title;
-	int32_t width;
-    int32_t height;
-	bool resizeable = false;
-};
+const std::vector<const char *> deviceExtensions = {
+	VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
 struct DeletionQueue
 {
 	std::deque<std::function<void()>> deletors;
 
-	void Add(std::function<void()>&& function)
+	void Add(std::function<void()> &&function)
 	{
 		deletors.emplace_back(function);
 	}
@@ -54,16 +43,19 @@ struct DeletionQueue
 class App
 {
 public:
-	App(const WindowCreateInfo &info);
+	App(std::string title, int32_t width, int32_t height);
 	~App();
 
 	void Run();
+
 private:
 	void Init();
 	void Update();
+	void Simulate();
 	void Draw();
+	void SubmitAndPresent();
 
-	void CreateWindow(const struct WindowCreateInfo& info);
+	void CreateWindow(std::string title, int32_t width, int32_t height);
 	void LoadVulkanLib();
 	void CreateInstance();
 	void CreateDebugUtilsMessenger();
@@ -75,29 +67,26 @@ private:
 	void CreateSwapChainFrameBuffers();
 	void CreateDescriptorPool();
 	void CreatePipelineCache();
-	void CreatePackedParticleBuffer();
 	void CreateGraphicsPipelineLayout();
 	void CreateGraphicsPipeline();
 	void CreateGraphicsCommandPool();
 	void CreateGraphicsCommandBuffers();
 	void CreateSemaphores();
 	void CreateComputeDescriptorSetLayout();
-	void UpdateComputeDescriptorSets();
 	void CreateComputePipelineLayout();
 	void CreateComputePipelines();
 	void CreateComputeCommandPool();
 	void CreateComputeCommandBuffer();
 
-	void CreateSubmitInfo();
-	void CreatePresentInfo();
-
-	void InitParticleData(std::array<glm::vec2,PARTICLE_NUM> initParticlePosition);
+	void InitParticleData(std::array<glm::vec2, PARTICLE_NUM> initParticlePosition);
+	void CreatePackedParticleBuffer();
+	void UpdateComputeDescriptorSets();
 
 	bool m_IsRunning;
 
-    WindowCreateInfo m_WindowCreateInfo;
-
-	SDL_Window* m_WindowHandle;
+	std::string m_WindowTitle;
+	int32_t m_WindowWidth, m_WindowHeight;
+	SDL_Window *m_WindowHandle;
 
 	VkInstance m_InstanceHandle;
 
@@ -129,7 +118,7 @@ private:
 
 	VkBuffer m_PackedParticlesBufferHandle;
 	VkDeviceMemory m_PackedParticleBufferMemoryHandle;
-	
+
 	VkPipelineLayout m_GraphicsPipelineLayoutHandle;
 	VkPipeline m_GraphicePipelineHandle;
 
@@ -149,12 +138,7 @@ private:
 
 	VkPipelineStageFlags waitDstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
-	VkSubmitInfo m_ComputeSubmitInfo;
-	VkSubmitInfo m_GraphicsSubmitInfo;
-
-	VkPresentInfoKHR m_PresentInfo;
-
-	uint32_t m_SwapChainImageIndex=0;
+	uint32_t m_SwapChainImageIndex = 0;
 
 	DeletionQueue m_DeletionQueue;
 
@@ -168,9 +152,9 @@ private:
 
 	const uint64_t m_PosSsboOffset = 0;
 	const uint64_t m_VelocitySsboOffset = m_PosSsboSize;
-	const uint64_t m_ForceSsboOffset = m_VelocitySsboOffset+ m_VelocitySsboSize;
-	const uint64_t m_DensitySsboOffset = m_ForceSsboOffset+ m_ForceSsboSize;
-	const uint64_t m_PressureSsboOffset = m_DensitySsboOffset+ m_DensitySsboSize;
+	const uint64_t m_ForceSsboOffset = m_VelocitySsboOffset + m_VelocitySsboSize;
+	const uint64_t m_DensitySsboOffset = m_ForceSsboOffset + m_ForceSsboSize;
+	const uint64_t m_PressureSsboOffset = m_DensitySsboOffset + m_DensitySsboSize;
 
 	glm::ivec2 m_SpawnPos;
 };

@@ -1,5 +1,4 @@
 #include "App.h"
-#include "Timer.h"
 #include <iostream>
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 													VkDebugUtilsMessageTypeFlagsEXT messageType,
@@ -67,8 +66,8 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
 		func(instance, debugMessenger, pAllocator);
 }
 
-App::App(const WindowCreateInfo &info)
-	: m_IsRunning(true), m_WindowCreateInfo(info)
+App::App(std::string title, int32_t width, int32_t height)
+	: m_IsRunning(true), m_WindowWidth(width), m_WindowHeight(height), m_WindowTitle(title)
 {
 }
 
@@ -86,10 +85,10 @@ void App::Run()
 	Init();
 	while (m_IsRunning)
 	{
-		Timer::CalcFrame(60);
-
 		Update();
+		Simulate();
 		Draw();
+		SubmitAndPresent();
 	}
 }
 
@@ -111,7 +110,7 @@ void App::Init()
 	system(str.c_str());
 #endif
 
-	CreateWindow(m_WindowCreateInfo);
+	CreateWindow(m_WindowTitle, m_WindowWidth, m_WindowHeight);
 	LoadVulkanLib();
 	CreateInstance();
 #if _DEBUG
@@ -125,23 +124,16 @@ void App::Init()
 	CreateSwapChainFrameBuffers();
 	CreateDescriptorPool();
 	CreatePipelineCache();
-	CreatePackedParticleBuffer();
 	CreateGraphicsPipelineLayout();
 	CreateGraphicsPipeline();
 	CreateGraphicsCommandPool();
 	CreateGraphicsCommandBuffers();
 	CreateSemaphores();
 	CreateComputeDescriptorSetLayout();
-	UpdateComputeDescriptorSets();
 	CreateComputePipelineLayout();
 	CreateComputePipelines();
 	CreateComputeCommandPool();
 	CreateComputeCommandBuffer();
-
-	CreateSubmitInfo();
-	CreatePresentInfo();
-
-	Timer::Init();
 
 	std::array<glm::vec2, PARTICLE_NUM> initParticlePosition;
 	for (auto i = 0, x = 0, y = 0; i < PARTICLE_NUM; ++i)
@@ -155,7 +147,9 @@ void App::Init()
 			y++;
 		}
 	}
+	CreatePackedParticleBuffer();
 	InitParticleData(initParticlePosition);
+	UpdateComputeDescriptorSets();
 }
 
 void App::Update()
@@ -222,32 +216,136 @@ void App::Update()
 		InitParticleData(initParticlePosition);
 	}
 
+	VkSubmitInfo computeSubmitInfo{};
+	computeSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	computeSubmitInfo.pNext = nullptr;
+	computeSubmitInfo.waitSemaphoreCount = 0;
+	computeSubmitInfo.pWaitSemaphores = nullptr;
+	computeSubmitInfo.pWaitDstStageMask = 0;
+	computeSubmitInfo.commandBufferCount = 1;
+	computeSubmitInfo.pCommandBuffers = &m_ComputeCommandBufferHandle;
+	computeSubmitInfo.signalSemaphoreCount = 0;
+	computeSubmitInfo.pSignalSemaphores = nullptr;
+
 	//update particle
-	VK_CHECK(vkQueueSubmit(m_ComputeQueueHandle, 1, &m_ComputeSubmitInfo, VK_NULL_HANDLE));
+	VK_CHECK(vkQueueSubmit(m_ComputeQueueHandle, 1, &computeSubmitInfo, VK_NULL_HANDLE));
+}
+void App::Simulate()
+{
+	VkCommandBufferBeginInfo beginInfo{};
+	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	beginInfo.pNext = nullptr;
+	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+	beginInfo.pInheritanceInfo = nullptr;
+
+	VK_CHECK(vkBeginCommandBuffer(m_ComputeCommandBufferHandle, &beginInfo));
+
+	vkCmdBindDescriptorSets(m_ComputeCommandBufferHandle, VK_PIPELINE_BIND_POINT_COMPUTE, m_ComputePipelineLayoutHandle, 0, 1, &m_ComputeDescriptorSetHandle, 0, nullptr);
+
+	vkCmdBindPipeline(m_ComputeCommandBufferHandle, VK_PIPELINE_BIND_POINT_COMPUTE, m_ComputePipelineHandles[0]);
+	vkCmdDispatch(m_ComputeCommandBufferHandle, WORK_GROUP_NUM, 1, 1);
+	vkCmdPipelineBarrier(m_ComputeCommandBufferHandle, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 0, nullptr);
+
+	vkCmdBindPipeline(m_ComputeCommandBufferHandle, VK_PIPELINE_BIND_POINT_COMPUTE, m_ComputePipelineHandles[1]);
+	vkCmdDispatch(m_ComputeCommandBufferHandle, WORK_GROUP_NUM, 1, 1);
+	vkCmdPipelineBarrier(m_ComputeCommandBufferHandle, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 0, nullptr);
+
+	vkCmdBindPipeline(m_ComputeCommandBufferHandle, VK_PIPELINE_BIND_POINT_COMPUTE, m_ComputePipelineHandles[2]);
+	vkCmdDispatch(m_ComputeCommandBufferHandle, WORK_GROUP_NUM, 1, 1);
+	vkCmdPipelineBarrier(m_ComputeCommandBufferHandle, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 0, nullptr);
+
+	VK_CHECK(vkEndCommandBuffer(m_ComputeCommandBufferHandle));
 }
 
 void App::Draw()
 {
+	for (size_t i = 0; i < m_GraphicsCommandBufferHandles.size(); ++i)
+	{
+		VkCommandBufferBeginInfo commandBufferBeginInfo = {};
+		commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		commandBufferBeginInfo.pNext = nullptr;
+		commandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+		commandBufferBeginInfo.pInheritanceInfo = nullptr;
+
+		vkBeginCommandBuffer(m_GraphicsCommandBufferHandles[i], &commandBufferBeginInfo);
+
+		VkClearValue clearValue{0.0f, 0.0f, 0.0f, 1.0f};
+		VkRenderPassBeginInfo renderPassBeginInfo;
+		renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		renderPassBeginInfo.pNext = nullptr;
+		renderPassBeginInfo.renderPass = m_RenderPassHandle;
+		renderPassBeginInfo.framebuffer = m_SwapChainFrameBufferHandles[i];
+		renderPassBeginInfo.renderArea.offset = {0, 0};
+		renderPassBeginInfo.renderArea.extent = m_SwapChainExtent;
+		renderPassBeginInfo.clearValueCount = 1;
+		renderPassBeginInfo.pClearValues = &clearValue;
+
+		vkCmdBeginRenderPass(m_GraphicsCommandBufferHandles[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+		VkViewport viewPort;
+		viewPort.x = 0;
+		viewPort.y = 0;
+		viewPort.width = m_SwapChainExtent.width;
+		viewPort.height = m_SwapChainExtent.height;
+		viewPort.minDepth = 0;
+		viewPort.maxDepth = 1;
+
+		VkRect2D scissor;
+		scissor.extent = m_SwapChainExtent;
+		scissor.offset = {0, 0};
+
+		vkCmdSetViewport(m_GraphicsCommandBufferHandles[i], 0, 1, &viewPort);
+		vkCmdBindPipeline(m_GraphicsCommandBufferHandles[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicePipelineHandle);
+
+		VkDeviceSize offsets = 0;
+		vkCmdBindVertexBuffers(m_GraphicsCommandBufferHandles[i], 0, 1, &m_PackedParticlesBufferHandle, &offsets);
+		vkCmdDraw(m_GraphicsCommandBufferHandles[i], PARTICLE_NUM, 1, 0, 0);
+		vkCmdEndRenderPass(m_GraphicsCommandBufferHandles[i]);
+
+		VK_CHECK(vkEndCommandBuffer(m_GraphicsCommandBufferHandles[i]));
+	}
+}
+
+void App::SubmitAndPresent()
+{
 	vkAcquireNextImageKHR(m_LogicalDeviceHandle, m_SwapChainHandle, UINT64_MAX, m_ImageAvailableSemaphoreHandle, VK_NULL_HANDLE, &m_SwapChainImageIndex);
-	m_GraphicsSubmitInfo.pCommandBuffers = m_GraphicsCommandBufferHandles.data() + m_SwapChainImageIndex;
 
-	VK_CHECK(vkQueueSubmit(m_GraphicsQueueHandle, 1, &m_GraphicsSubmitInfo, VK_NULL_HANDLE));
+	VkSubmitInfo graphicsSubmitInfo{};
+	graphicsSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	graphicsSubmitInfo.pNext = nullptr;
+	graphicsSubmitInfo.waitSemaphoreCount = 1;
+	graphicsSubmitInfo.pWaitSemaphores = &m_ImageAvailableSemaphoreHandle;
+	graphicsSubmitInfo.pWaitDstStageMask = &waitDstStageMask;
+	graphicsSubmitInfo.commandBufferCount = 1;
+	graphicsSubmitInfo.pCommandBuffers = m_GraphicsCommandBufferHandles.data() + m_SwapChainImageIndex;
+	graphicsSubmitInfo.signalSemaphoreCount = 1;
+	graphicsSubmitInfo.pSignalSemaphores = &m_RenderFinishedSemaphoreHandle;
 
-	vkQueuePresentKHR(m_PresentQueueHandle, &m_PresentInfo);
+	VK_CHECK(vkQueueSubmit(m_GraphicsQueueHandle, 1, &graphicsSubmitInfo, VK_NULL_HANDLE));
+
+	VkPresentInfoKHR presentInfo{};
+	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+	presentInfo.pNext = nullptr;
+	presentInfo.waitSemaphoreCount = 1;
+	presentInfo.pWaitSemaphores = &m_RenderFinishedSemaphoreHandle;
+	presentInfo.swapchainCount = 1;
+	presentInfo.pSwapchains = &m_SwapChainHandle;
+	presentInfo.pImageIndices = &m_SwapChainImageIndex;
+	presentInfo.pResults = nullptr;
+
+	vkQueuePresentKHR(m_PresentQueueHandle, &presentInfo);
 	vkQueueWaitIdle(m_PresentQueueHandle);
 }
 
-void App::CreateWindow(const WindowCreateInfo &info)
+void App::CreateWindow(std::string title, int32_t width, int32_t height)
 {
 	uint32_t windowFlag = SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_VULKAN | SDL_WINDOW_SHOWN;
-	if (info.resizeable)
-		windowFlag |= SDL_WINDOW_RESIZABLE;
 
-	m_WindowHandle = SDL_CreateWindow(info.title.c_str(),
+	m_WindowHandle = SDL_CreateWindow(title.c_str(),
 									  SDL_WINDOWPOS_CENTERED,
 									  SDL_WINDOWPOS_CENTERED,
-									  info.width,
-									  info.height,
+									  width,
+									  height,
 									  windowFlag);
 
 	m_DeletionQueue.Add([=]()
@@ -869,52 +967,6 @@ void App::CreateGraphicsCommandBuffers()
 
 	VK_CHECK(vkAllocateCommandBuffers(m_LogicalDeviceHandle, &bufferAllocInfo, m_GraphicsCommandBufferHandles.data()));
 
-	for (size_t i = 0; i < m_GraphicsCommandBufferHandles.size(); ++i)
-	{
-		VkCommandBufferBeginInfo commandBufferBeginInfo = {};
-		commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-		commandBufferBeginInfo.pNext = nullptr;
-		commandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
-		commandBufferBeginInfo.pInheritanceInfo = nullptr;
-
-		vkBeginCommandBuffer(m_GraphicsCommandBufferHandles[i], &commandBufferBeginInfo);
-
-		VkClearValue clearValue{0.0f, 0.0f, 0.0f, 1.0f};
-		VkRenderPassBeginInfo renderPassBeginInfo;
-		renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		renderPassBeginInfo.pNext = nullptr;
-		renderPassBeginInfo.renderPass = m_RenderPassHandle;
-		renderPassBeginInfo.framebuffer = m_SwapChainFrameBufferHandles[i];
-		renderPassBeginInfo.renderArea.offset = {0, 0};
-		renderPassBeginInfo.renderArea.extent = m_SwapChainExtent;
-		renderPassBeginInfo.clearValueCount = 1;
-		renderPassBeginInfo.pClearValues = &clearValue;
-
-		vkCmdBeginRenderPass(m_GraphicsCommandBufferHandles[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-		VkViewport viewPort;
-		viewPort.x = 0;
-		viewPort.y = 0;
-		viewPort.width = m_SwapChainExtent.width;
-		viewPort.height = m_SwapChainExtent.height;
-		viewPort.minDepth = 0;
-		viewPort.maxDepth = 1;
-
-		VkRect2D scissor;
-		scissor.extent = m_SwapChainExtent;
-		scissor.offset = {0, 0};
-
-		vkCmdSetViewport(m_GraphicsCommandBufferHandles[i], 0, 1, &viewPort);
-		vkCmdBindPipeline(m_GraphicsCommandBufferHandles[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicePipelineHandle);
-
-		VkDeviceSize offsets = 0;
-		vkCmdBindVertexBuffers(m_GraphicsCommandBufferHandles[i], 0, 1, &m_PackedParticlesBufferHandle, &offsets);
-		vkCmdDraw(m_GraphicsCommandBufferHandles[i], PARTICLE_NUM, 1, 0, 0);
-		vkCmdEndRenderPass(m_GraphicsCommandBufferHandles[i]);
-
-		VK_CHECK(vkEndCommandBuffer(m_GraphicsCommandBufferHandles[i]));
-	}
-
 	m_DeletionQueue.Add([=]()
 						{ vkFreeCommandBuffers(m_LogicalDeviceHandle, m_GraphicsCommandPoolHandle, m_GraphicsCommandBufferHandles.size(), m_GraphicsCommandBufferHandles.data()); });
 }
@@ -1163,67 +1215,8 @@ void App::CreateComputeCommandBuffer()
 
 	VK_CHECK(vkAllocateCommandBuffers(m_LogicalDeviceHandle, &allocInfo, &m_ComputeCommandBufferHandle));
 
-	VkCommandBufferBeginInfo beginInfo{};
-	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	beginInfo.pNext = nullptr;
-	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
-	beginInfo.pInheritanceInfo = nullptr;
-
-	VK_CHECK(vkBeginCommandBuffer(m_ComputeCommandBufferHandle, &beginInfo));
-
-	vkCmdBindDescriptorSets(m_ComputeCommandBufferHandle, VK_PIPELINE_BIND_POINT_COMPUTE, m_ComputePipelineLayoutHandle, 0, 1, &m_ComputeDescriptorSetHandle, 0, nullptr);
-
-	vkCmdBindPipeline(m_ComputeCommandBufferHandle, VK_PIPELINE_BIND_POINT_COMPUTE, m_ComputePipelineHandles[0]);
-	vkCmdDispatch(m_ComputeCommandBufferHandle, WORK_GROUP_NUM, 1, 1);
-	vkCmdPipelineBarrier(m_ComputeCommandBufferHandle, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 0, nullptr);
-
-	vkCmdBindPipeline(m_ComputeCommandBufferHandle, VK_PIPELINE_BIND_POINT_COMPUTE, m_ComputePipelineHandles[1]);
-	vkCmdDispatch(m_ComputeCommandBufferHandle, WORK_GROUP_NUM, 1, 1);
-	vkCmdPipelineBarrier(m_ComputeCommandBufferHandle, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 0, nullptr);
-
-	vkCmdBindPipeline(m_ComputeCommandBufferHandle, VK_PIPELINE_BIND_POINT_COMPUTE, m_ComputePipelineHandles[2]);
-	vkCmdDispatch(m_ComputeCommandBufferHandle, WORK_GROUP_NUM, 1, 1);
-	vkCmdPipelineBarrier(m_ComputeCommandBufferHandle, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 0, nullptr);
-
-	vkEndCommandBuffer(m_ComputeCommandBufferHandle);
-
 	m_DeletionQueue.Add([=]()
 						{ vkFreeCommandBuffers(m_LogicalDeviceHandle, m_ComputeCommandPoolHandle, 1, &m_ComputeCommandBufferHandle); });
-}
-
-void App::CreateSubmitInfo()
-{
-	m_ComputeSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	m_ComputeSubmitInfo.pNext = nullptr;
-	m_ComputeSubmitInfo.waitSemaphoreCount = 0;
-	m_ComputeSubmitInfo.pWaitSemaphores = nullptr;
-	m_ComputeSubmitInfo.pWaitDstStageMask = 0;
-	m_ComputeSubmitInfo.commandBufferCount = 1;
-	m_ComputeSubmitInfo.pCommandBuffers = &m_ComputeCommandBufferHandle;
-	m_ComputeSubmitInfo.signalSemaphoreCount = 0;
-	m_ComputeSubmitInfo.pSignalSemaphores = nullptr;
-
-	m_GraphicsSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	m_GraphicsSubmitInfo.pNext = nullptr;
-	m_GraphicsSubmitInfo.waitSemaphoreCount = 1;
-	m_GraphicsSubmitInfo.pWaitSemaphores = &m_ImageAvailableSemaphoreHandle;
-	m_GraphicsSubmitInfo.pWaitDstStageMask = &waitDstStageMask;
-	m_GraphicsSubmitInfo.commandBufferCount = 1;
-	m_GraphicsSubmitInfo.pCommandBuffers = VK_NULL_HANDLE;
-	m_GraphicsSubmitInfo.signalSemaphoreCount = 1;
-	m_GraphicsSubmitInfo.pSignalSemaphores = &m_RenderFinishedSemaphoreHandle;
-}
-
-void App::CreatePresentInfo()
-{
-	m_PresentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-	m_PresentInfo.pNext = nullptr;
-	m_PresentInfo.waitSemaphoreCount = 1;
-	m_PresentInfo.pWaitSemaphores = &m_RenderFinishedSemaphoreHandle;
-	m_PresentInfo.swapchainCount = 1;
-	m_PresentInfo.pSwapchains = &m_SwapChainHandle;
-	m_PresentInfo.pImageIndices = &m_SwapChainImageIndex;
-	m_PresentInfo.pResults = nullptr;
 }
 
 void App::InitParticleData(std::array<glm::vec2, PARTICLE_NUM> initParticlePosition)

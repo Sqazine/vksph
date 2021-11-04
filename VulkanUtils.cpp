@@ -98,7 +98,7 @@ bool CheckExtensionSupport(std::vector<const char*> extensionNames, std::vector<
 				extFound = true;
 				break;;
 			}
-		if (extFound = false)
+		if (extFound == false)
 			return false;
 	}
 
