@@ -9,7 +9,11 @@
 #include <deque>
 #include <functional>
 #include <array>
+#include <memory>
 #include "VulkanUtils.h"
+#include "VulkanInstance.h"
+#include "VulkanDevice.h"
+#include "VulkanSwapChain.h"
 
 #define PARTICLE_NUM 20000
 #define PARTICLE_RADIUS 0.005f
@@ -57,12 +61,6 @@ private:
 
 	void CreateWindow(std::string title, int32_t width, int32_t height);
 	void LoadVulkanLib();
-	void CreateInstance();
-	void CreateDebugUtilsMessenger();
-	void CreateSurface();
-	void SelectPhysicalDevice();
-	void CreateLogicalDevice();
-	void CreateSwapChain();
 	void CreateRenderPass();
 	void CreateSwapChainFrameBuffers();
 	void CreateDescriptorPool();
@@ -88,26 +86,9 @@ private:
 	int32_t m_WindowWidth, m_WindowHeight;
 	SDL_Window *m_WindowHandle;
 
-	VkInstance m_InstanceHandle;
-
-	VkDebugUtilsMessengerEXT m_DebugMessengerHandle;
-
-	VkSurfaceKHR m_SurfaceHandle;
-
-	VkPhysicalDevice m_PhysicalDeviceHandle;
-
-	QueueFamilyIndices m_QueueIndices;
-	VkDevice m_LogicalDeviceHandle;
-	VkQueue m_GraphicsQueueHandle;
-	VkQueue m_PresentQueueHandle;
-	VkQueue m_ComputeQueueHandle;
-
-	SwapChainSupportDetails m_SwapChainSupportDetails;
-	VkSwapchainKHR m_SwapChainHandle;
-	std::vector<VkImage> m_SwapChainImages;
-	std::vector<VkImageView> m_SwapChainImageViews;
-	VkFormat m_SwapChainImageFormat;
-	VkExtent2D m_SwapChainExtent;
+	std::unique_ptr<VulkanInstance> m_Instance;
+	std::unique_ptr<VulkanDevice> m_Device;
+	std::unique_ptr<VulkanSwapChain> m_SwapChain;
 
 	VkRenderPass m_RenderPassHandle;
 

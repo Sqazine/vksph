@@ -194,55 +194,6 @@ VkExtent2D ChooseSwapChainExtent(SDL_Window* window, const VkSurfaceCapabilities
 	}
 }
 
-std::vector<VkImage> GetSwapChainImages(VkDevice device, VkSwapchainKHR swapChain)
-{
-	uint32_t imageCount;
-	vkGetSwapchainImagesKHR(device, swapChain, &imageCount, nullptr);
-	std::vector<VkImage> swapChainImages(imageCount);
-	vkGetSwapchainImagesKHR(device, swapChain, &imageCount, swapChainImages.data());
-	return swapChainImages;
-}
-
-std::vector<VkImageView> CreateSwapChainImageViews(VkDevice device, const std::vector<VkImage>& images, VkFormat format)
-{
-	std::vector<VkImageView> imageViews(images.size());
-
-	for (size_t i = 0; i < images.size(); ++i)
-	{
-		VkImageViewCreateInfo info = {};
-		info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		info.pNext = nullptr;
-		info.flags = 0;
-		info.image = images[i];
-		info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-		info.format = format;
-		info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-		info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-		info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-		info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-		info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		info.subresourceRange.baseMipLevel = 0;
-		info.subresourceRange.levelCount = 1;
-		info.subresourceRange.baseArrayLayer = 0;
-		info.subresourceRange.layerCount = 1;
-
-		VK_CHECK(vkCreateImageView(device, &info, nullptr, &imageViews[i]));
-	}
-	return imageViews;
-}
-
-uint32_t FindMemoryType(VkPhysicalDevice device, uint32_t typeFilter, VkMemoryPropertyFlags properties)
-{
-	VkPhysicalDeviceMemoryProperties phyDevMemProps = GetPhysicalDeviceMemoryProps(device);
-
-	for (uint32_t i = 0; i < phyDevMemProps.memoryTypeCount; ++i)
-		if ((typeFilter & (1 << i)) && (phyDevMemProps.memoryTypes[i].propertyFlags & properties) == properties)
-			return i;
-
-	std::cout << "Failed to find suitable memory type!" << std::endl;
-	return -1;
-}
-
 VkShaderModule CreateShaderModuleFromSpirvFile(VkDevice device, std::string_view filePath)
 {
 	std::ifstream file(filePath.data(), std::ios::binary);

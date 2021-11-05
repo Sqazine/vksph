@@ -1,70 +1,5 @@
 #include "App.h"
 #include <iostream>
-static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-													VkDebugUtilsMessageTypeFlagsEXT messageType,
-													const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
-													void *)
-{
-	std::string ms;
-
-	switch (messageSeverity)
-	{
-	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
-		ms = "VERBOSE";
-		break;
-	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
-		ms = "ERROR";
-		break;
-	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
-		ms = "WARNING";
-		break;
-	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
-		ms = "INFO";
-		break;
-	default:
-		ms = "UNKNOWN";
-		break;
-	}
-
-	std::string mt;
-
-	if (messageType == 7)
-		mt = "General | Validation | Performance";
-	else if (messageType == 6)
-		mt = "Validation | Performance";
-	else if (messageType == 5)
-		mt = "General | Performance";
-	else if (messageType == 4)
-		mt = "Performance";
-	else if (messageType == 3)
-		mt = "General | Validation";
-	else if (messageType == 2)
-		mt = "Validation";
-	else if (messageType == 1)
-		mt = "General";
-	else
-		mt = "Unknown";
-
-	printf("[%s: %s]\n%s\n", ms.c_str(), mt.c_str(), pCallbackData->pMessage);
-
-	return VK_FALSE;
-}
-
-VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkDebugUtilsMessengerEXT *pDebugMessenger)
-{
-	auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
-	if (func != nullptr)
-		return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
-	else
-		return VK_ERROR_EXTENSION_NOT_PRESENT;
-}
-
-void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks *pAllocator)
-{
-	auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
-	if (func != nullptr)
-		func(instance, debugMessenger, pAllocator);
-}
 
 App::App(std::string title, int32_t width, int32_t height)
 	: m_IsRunning(true), m_WindowWidth(width), m_WindowHeight(height), m_WindowTitle(title)
@@ -73,7 +8,7 @@ App::App(std::string title, int32_t width, int32_t height)
 
 App::~App()
 {
-	vkDeviceWaitIdle(m_LogicalDeviceHandle);
+	m_Device->WaitIdle();
 
 	m_DeletionQueue.Flush();
 
@@ -112,14 +47,11 @@ void App::Init()
 
 	CreateWindow(m_WindowTitle, m_WindowWidth, m_WindowHeight);
 	LoadVulkanLib();
-	CreateInstance();
-#if _DEBUG
-	CreateDebugUtilsMessenger();
-#endif
-	CreateSurface();
-	SelectPhysicalDevice();
-	CreateLogicalDevice();
-	CreateSwapChain();
+
+	m_Instance = std::make_unique<VulkanInstance>(m_WindowHandle, validationLayers);
+	m_Device = std::make_unique<VulkanDevice>(m_Instance.get(), deviceExtensions);
+	m_SwapChain=std::make_unique<VulkanSwapChain>(m_WindowHandle,m_Instance.get(),m_Device.get());
+
 	CreateRenderPass();
 	CreateSwapChainFrameBuffers();
 	CreateDescriptorPool();
@@ -228,7 +160,7 @@ void App::Update()
 	computeSubmitInfo.pSignalSemaphores = nullptr;
 
 	//update particle
-	VK_CHECK(vkQueueSubmit(m_ComputeQueueHandle, 1, &computeSubmitInfo, VK_NULL_HANDLE));
+	VK_CHECK(m_Device->GetComputeQueue()->Submit(1, &computeSubmitInfo, VK_NULL_HANDLE));
 }
 void App::Simulate()
 {
@@ -276,7 +208,7 @@ void App::Draw()
 		renderPassBeginInfo.renderPass = m_RenderPassHandle;
 		renderPassBeginInfo.framebuffer = m_SwapChainFrameBufferHandles[i];
 		renderPassBeginInfo.renderArea.offset = {0, 0};
-		renderPassBeginInfo.renderArea.extent = m_SwapChainExtent;
+		renderPassBeginInfo.renderArea.extent = m_SwapChain->GetSwapChainExtent();
 		renderPassBeginInfo.clearValueCount = 1;
 		renderPassBeginInfo.pClearValues = &clearValue;
 
@@ -285,13 +217,13 @@ void App::Draw()
 		VkViewport viewPort;
 		viewPort.x = 0;
 		viewPort.y = 0;
-		viewPort.width = m_SwapChainExtent.width;
-		viewPort.height = m_SwapChainExtent.height;
+		viewPort.width = m_SwapChain->GetSwapChainExtent().width;
+		viewPort.height = m_SwapChain->GetSwapChainExtent().height;
 		viewPort.minDepth = 0;
 		viewPort.maxDepth = 1;
 
 		VkRect2D scissor;
-		scissor.extent = m_SwapChainExtent;
+		scissor.extent = m_SwapChain->GetSwapChainExtent();
 		scissor.offset = {0, 0};
 
 		vkCmdSetViewport(m_GraphicsCommandBufferHandles[i], 0, 1, &viewPort);
@@ -308,7 +240,7 @@ void App::Draw()
 
 void App::SubmitAndPresent()
 {
-	vkAcquireNextImageKHR(m_LogicalDeviceHandle, m_SwapChainHandle, UINT64_MAX, m_ImageAvailableSemaphoreHandle, VK_NULL_HANDLE, &m_SwapChainImageIndex);
+	vkAcquireNextImageKHR(m_Device->GetLogicalDeviceHandle(), m_SwapChain->GetSwapChainHandle(), UINT64_MAX, m_ImageAvailableSemaphoreHandle, VK_NULL_HANDLE, &m_SwapChainImageIndex);
 
 	VkSubmitInfo graphicsSubmitInfo{};
 	graphicsSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -321,7 +253,7 @@ void App::SubmitAndPresent()
 	graphicsSubmitInfo.signalSemaphoreCount = 1;
 	graphicsSubmitInfo.pSignalSemaphores = &m_RenderFinishedSemaphoreHandle;
 
-	VK_CHECK(vkQueueSubmit(m_GraphicsQueueHandle, 1, &graphicsSubmitInfo, VK_NULL_HANDLE));
+	VK_CHECK(m_Device->GetGraphicsQueue()->Submit(1, &graphicsSubmitInfo, VK_NULL_HANDLE));
 
 	VkPresentInfoKHR presentInfo{};
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -329,12 +261,12 @@ void App::SubmitAndPresent()
 	presentInfo.waitSemaphoreCount = 1;
 	presentInfo.pWaitSemaphores = &m_RenderFinishedSemaphoreHandle;
 	presentInfo.swapchainCount = 1;
-	presentInfo.pSwapchains = &m_SwapChainHandle;
+	presentInfo.pSwapchains = &m_SwapChain->GetSwapChainHandle();
 	presentInfo.pImageIndices = &m_SwapChainImageIndex;
 	presentInfo.pResults = nullptr;
 
-	vkQueuePresentKHR(m_PresentQueueHandle, &presentInfo);
-	vkQueueWaitIdle(m_PresentQueueHandle);
+	m_Device->GetPresentQueue()->Present(&presentInfo);
+	m_Device->GetPresentQueue()->WaitIdle();
 }
 
 void App::CreateWindow(std::string title, int32_t width, int32_t height)
@@ -375,278 +307,10 @@ void App::LoadVulkanLib()
 						{ SDL_Vulkan_UnloadLibrary(); });
 }
 
-void App::CreateInstance()
-{
-	VkApplicationInfo appInfo = {};
-	appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-	appInfo.pNext = nullptr;
-	appInfo.apiVersion = VK_HEADER_VERSION_COMPLETE;
-	appInfo.applicationVersion = VK_MAKE_API_VERSION(0, 1, 0, 0);
-	appInfo.engineVersion = VK_MAKE_API_VERSION(0, 1, 0, 0);
-	appInfo.pApplicationName = nullptr;
-	appInfo.pEngineName = nullptr;
-
-	VkInstanceCreateInfo instanceInfo = {};
-	instanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-	instanceInfo.pNext = nullptr;
-	instanceInfo.flags = 0;
-	instanceInfo.pApplicationInfo = &appInfo;
-
-	uint32_t instanceExtCount;
-	std::vector<const char *> requiredInstanceExts;
-	SDL_Vulkan_GetInstanceExtensions(m_WindowHandle, &instanceExtCount, nullptr);
-	requiredInstanceExts.resize(instanceExtCount);
-	SDL_Vulkan_GetInstanceExtensions(m_WindowHandle, &instanceExtCount, requiredInstanceExts.data());
-#if _DEBUG
-	requiredInstanceExts.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-#endif
-
-	std::vector<VkExtensionProperties> instanceExtensionProps = GetInstanceExtensionProps();
-
-	bool extSatisfied = CheckExtensionSupport(requiredInstanceExts, instanceExtensionProps);
-
-	if (extSatisfied)
-	{
-		instanceInfo.enabledExtensionCount = requiredInstanceExts.size();
-		instanceInfo.ppEnabledExtensionNames = requiredInstanceExts.data();
-	}
-	else
-	{
-		instanceInfo.enabledExtensionCount = 0;
-		instanceInfo.ppEnabledExtensionNames = nullptr;
-	}
-
-#if _DEBUG
-	instanceInfo.enabledLayerCount = validationLayers.size();
-	instanceInfo.ppEnabledLayerNames = validationLayers.data();
-	if (!CheckValidationLayerSupport(validationLayers, GetInstanceLayerProps()))
-		std::cout << "Lack of necessary validation layer" << std::endl;
-#endif
-
-	VK_CHECK(vkCreateInstance(&instanceInfo, nullptr, &m_InstanceHandle));
-
-	m_DeletionQueue.Add([=]()
-						{ vkDestroyInstance(m_InstanceHandle, nullptr); });
-}
-
-void App::CreateDebugUtilsMessenger()
-{
-	VkDebugUtilsMessengerCreateInfoEXT createInfo = {};
-	createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-	createInfo.pNext = nullptr;
-	createInfo.flags = 0;
-	createInfo.pfnUserCallback = debugCallback;
-	createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
-	createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-	createInfo.pUserData = nullptr;
-
-	if (CreateDebugUtilsMessengerEXT(m_InstanceHandle, &createInfo, nullptr, &m_DebugMessengerHandle) != VK_SUCCESS)
-		std::cout << "Failed to create debug messenger" << std::endl;
-
-	m_DeletionQueue.Add([=]()
-						{ DestroyDebugUtilsMessengerEXT(m_InstanceHandle, m_DebugMessengerHandle, nullptr); });
-}
-
-void App::CreateSurface()
-{
-	if (SDL_Vulkan_CreateSurface(m_WindowHandle, m_InstanceHandle, &m_SurfaceHandle) != SDL_TRUE)
-		std::cout << "Failed to create vulkan surface:" << SDL_GetError() << std::endl;
-
-	m_DeletionQueue.Add([=]()
-						{ vkDestroySurfaceKHR(m_InstanceHandle, m_SurfaceHandle, nullptr); });
-}
-
-void App::SelectPhysicalDevice()
-{
-	uint32_t physicalDeviceCount = 0;
-	vkEnumeratePhysicalDevices(m_InstanceHandle, &physicalDeviceCount, nullptr);
-	if (physicalDeviceCount == 0)
-		std::cout << "No GPU support vulkan" << std::endl;
-	std::vector<VkPhysicalDevice> physicalDevices(physicalDeviceCount);
-	vkEnumeratePhysicalDevices(m_InstanceHandle, &physicalDeviceCount, physicalDevices.data());
-
-	for (auto phyDev : physicalDevices)
-	{
-		std::vector<VkExtensionProperties> phyDevExtensions = GetPhysicalDeviceExtensionProps(phyDev);
-		VkPhysicalDeviceFeatures features = GetPhysicalDeviceFeatures(phyDev);
-
-		bool extSatisfied = CheckExtensionSupport(deviceExtensions, phyDevExtensions);
-
-		if (extSatisfied && FindQueueFamilies(phyDev, m_SurfaceHandle).isComplete())
-			m_PhysicalDeviceHandle = phyDev;
-		VkPhysicalDeviceProperties props = GetPhysicalDeviceProps(m_PhysicalDeviceHandle);
-		if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
-			break;
-	}
-
-	VkPhysicalDeviceProperties props = GetPhysicalDeviceProps(m_PhysicalDeviceHandle);
-	std::vector<VkExtensionProperties> phyDevExtensions = GetPhysicalDeviceExtensionProps(m_PhysicalDeviceHandle);
-
-	std::cout << "[INFO]Selected device name: " << props.deviceName << std::endl
-			  << "[INFO]Selected device type: ";
-	switch (props.deviceType)
-	{
-	case VK_PHYSICAL_DEVICE_TYPE_OTHER:
-		std::cout << "VK_PHYSICAL_DEVICE_TYPE_OTHER";
-		break;
-	case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
-		std::cout << "VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU";
-		break;
-	case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
-		std::cout << "VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU";
-		break;
-	case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
-		std::cout << "VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU";
-		break;
-	case VK_PHYSICAL_DEVICE_TYPE_CPU:
-		std::cout << "VK_PHYSICAL_DEVICE_TYPE_CPU";
-		break;
-	default:;
-	}
-	std::cout << " (" << props.deviceType << ")" << std::endl
-			  << "[INFO]Selected device driver version: "
-			  << VK_VERSION_MAJOR(props.driverVersion) << "."
-			  << VK_VERSION_MINOR(props.driverVersion) << "."
-			  << VK_VERSION_PATCH(props.driverVersion) << std::endl
-			  << "[INFO]Selected device vulkan api version: "
-			  << VK_VERSION_MAJOR(props.apiVersion) << "."
-			  << VK_VERSION_MINOR(props.apiVersion) << "."
-			  << VK_VERSION_PATCH(props.apiVersion) << std::endl;
-
-	std::cout << "[INFO]Selected device available extensions:" << std::endl;
-	for (const auto &extension : phyDevExtensions)
-	{
-		std::cout << "[INFO]     name: " << extension.extensionName << " spec_ver: "
-				  << VK_VERSION_MAJOR(extension.specVersion) << "."
-				  << VK_VERSION_MINOR(extension.specVersion) << "."
-				  << VK_VERSION_PATCH(extension.specVersion) << std::endl;
-	}
-}
-
-void App::CreateLogicalDevice()
-{
-	m_QueueIndices = FindQueueFamilies(m_PhysicalDeviceHandle, m_SurfaceHandle);
-
-	std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
-
-	if (m_QueueIndices.IsSameFamily())
-	{
-		const float queuePriorities[3]{1, 1, 1};
-		VkDeviceQueueCreateInfo info = {};
-		info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-		info.pNext = nullptr;
-		info.flags = 0;
-		info.pQueuePriorities = queuePriorities;
-		info.queueCount = 3;
-		info.queueFamilyIndex = m_QueueIndices.graphicsFamily.value();
-		queueCreateInfos.emplace_back(info);
-	}
-	else
-	{
-		const float queuePriorities = 1.0f;
-		std::vector<uint32_t> uniIndices = {m_QueueIndices.graphicsFamily.value(), m_QueueIndices.presentFamily.value(), m_QueueIndices.computeFamily.value()};
-		for (auto idx : uniIndices)
-		{
-			VkDeviceQueueCreateInfo info = {};
-			info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-			info.pNext = nullptr;
-			info.flags = 0;
-			info.pQueuePriorities = &queuePriorities;
-			info.queueCount = 1;
-			info.queueFamilyIndex = idx;
-			queueCreateInfos.emplace_back(info);
-		}
-	}
-
-	VkDeviceCreateInfo deviceCreateInfo = {};
-	deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-	deviceCreateInfo.pNext = nullptr;
-	deviceCreateInfo.flags = 0;
-	deviceCreateInfo.enabledExtensionCount = deviceExtensions.size();
-	deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
-#if _DEBUG
-	deviceCreateInfo.enabledLayerCount = validationLayers.size();
-	deviceCreateInfo.ppEnabledLayerNames = validationLayers.data();
-#endif
-	deviceCreateInfo.pEnabledFeatures = nullptr;
-	deviceCreateInfo.queueCreateInfoCount = queueCreateInfos.size();
-	deviceCreateInfo.pQueueCreateInfos = queueCreateInfos.data();
-
-	VK_CHECK(vkCreateDevice(m_PhysicalDeviceHandle, &deviceCreateInfo, nullptr, &m_LogicalDeviceHandle));
-
-	vkGetDeviceQueue(m_LogicalDeviceHandle, m_QueueIndices.graphicsFamily.value(), 0, &m_GraphicsQueueHandle);
-	vkGetDeviceQueue(m_LogicalDeviceHandle, m_QueueIndices.presentFamily.value(), 0, &m_PresentQueueHandle);
-	vkGetDeviceQueue(m_LogicalDeviceHandle, m_QueueIndices.computeFamily.value(), 0, &m_ComputeQueueHandle);
-
-	m_DeletionQueue.Add([=]()
-						{ vkDestroyDevice(m_LogicalDeviceHandle, nullptr); });
-}
-
-void App::CreateSwapChain()
-{
-	SwapChainSupportDetails swapChainSupport = QuerySwapChainSupport(m_PhysicalDeviceHandle, m_SurfaceHandle);
-	VkSurfaceFormatKHR surfaceFormat = ChooseSwapChainSurfaceFormat(swapChainSupport.formats);
-	VkPresentModeKHR presentMode = ChooseSwapChainPresentMode(swapChainSupport.presentModes);
-	VkExtent2D extent = ChooseSwapChainExtent(m_WindowHandle, swapChainSupport.capabilities);
-
-	uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
-	if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount)
-		imageCount = swapChainSupport.capabilities.maxImageCount;
-
-	VkSwapchainCreateInfoKHR createInfo{};
-	createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-	createInfo.pNext = nullptr;
-	createInfo.flags = 0;
-	createInfo.surface = m_SurfaceHandle;
-	createInfo.minImageCount = imageCount;
-	createInfo.imageFormat = surfaceFormat.format;
-	createInfo.imageColorSpace = surfaceFormat.colorSpace;
-	createInfo.imageExtent = extent;
-	createInfo.imageArrayLayers = 1;
-	createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-
-	std::vector<uint32_t> uniIndices = {m_QueueIndices.graphicsFamily.value(), m_QueueIndices.presentFamily.value(), m_QueueIndices.computeFamily.value()};
-
-	if (m_QueueIndices.graphicsFamily != m_QueueIndices.presentFamily ||
-		m_QueueIndices.graphicsFamily != m_QueueIndices.computeFamily ||
-		m_QueueIndices.presentFamily != m_QueueIndices.computeFamily)
-	{
-		createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-		createInfo.queueFamilyIndexCount = uniIndices.size();
-		createInfo.pQueueFamilyIndices = uniIndices.data();
-	}
-	else
-	{
-		createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		createInfo.queueFamilyIndexCount = 0;
-		createInfo.pQueueFamilyIndices = nullptr;
-	}
-
-	createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
-	createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-	createInfo.presentMode = presentMode;
-	createInfo.clipped = VK_TRUE;
-	createInfo.oldSwapchain = VK_NULL_HANDLE;
-
-	VK_CHECK(vkCreateSwapchainKHR(m_LogicalDeviceHandle, &createInfo, nullptr, &m_SwapChainHandle));
-
-	m_SwapChainImages = GetSwapChainImages(m_LogicalDeviceHandle, m_SwapChainHandle);
-	m_SwapChainImageFormat = surfaceFormat.format;
-	m_SwapChainExtent = extent;
-	m_SwapChainImageViews = CreateSwapChainImageViews(m_LogicalDeviceHandle, m_SwapChainImages, m_SwapChainImageFormat);
-
-	m_DeletionQueue.Add([=]()
-						{
-							for (auto imageView : m_SwapChainImageViews)
-								vkDestroyImageView(m_LogicalDeviceHandle, imageView, nullptr);
-							vkDestroySwapchainKHR(m_LogicalDeviceHandle, m_SwapChainHandle, nullptr);
-						});
-}
-
 void App::CreateRenderPass()
 {
 	VkAttachmentDescription colorAttachment{};
-	colorAttachment.format = m_SwapChainImageFormat;
+	colorAttachment.format = m_SwapChain->GetSwapChainImageFormat();
 	colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 	colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 	colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -671,17 +335,17 @@ void App::CreateRenderPass()
 	renderPassInfo.subpassCount = 1;
 	renderPassInfo.pSubpasses = &subpass;
 
-	VK_CHECK(vkCreateRenderPass(m_LogicalDeviceHandle, &renderPassInfo, nullptr, &m_RenderPassHandle));
+	VK_CHECK(vkCreateRenderPass(m_Device->GetLogicalDeviceHandle(), &renderPassInfo, nullptr, &m_RenderPassHandle));
 
 	m_DeletionQueue.Add([=]()
-						{ vkDestroyRenderPass(m_LogicalDeviceHandle, m_RenderPassHandle, nullptr); });
+						{ vkDestroyRenderPass(m_Device->GetLogicalDeviceHandle(), m_RenderPassHandle, nullptr); });
 }
 
 void App::CreateSwapChainFrameBuffers()
 {
-	m_SwapChainFrameBufferHandles.resize(m_SwapChainImageViews.size());
+	m_SwapChainFrameBufferHandles.resize(m_SwapChain->GetSwapChainImageViews().size());
 
-	for (size_t i = 0; i < m_SwapChainImageViews.size(); ++i)
+	for (size_t i = 0; i < m_SwapChain->GetSwapChainImageViews().size(); ++i)
 	{
 		VkFramebufferCreateInfo info;
 		info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -689,18 +353,18 @@ void App::CreateSwapChainFrameBuffers()
 		info.flags = 0;
 		info.renderPass = m_RenderPassHandle;
 		info.attachmentCount = 1;
-		info.pAttachments = &m_SwapChainImageViews[i];
-		info.width = m_SwapChainExtent.width;
-		info.height = m_SwapChainExtent.height;
+		info.pAttachments = &m_SwapChain->GetSwapChainImageViews()[i];
+		info.width = m_SwapChain->GetSwapChainExtent().width;
+		info.height = m_SwapChain->GetSwapChainExtent().height;
 		info.layers = 1;
 
-		VK_CHECK(vkCreateFramebuffer(m_LogicalDeviceHandle, &info, nullptr, &m_SwapChainFrameBufferHandles[i]));
+		VK_CHECK(vkCreateFramebuffer(m_Device->GetLogicalDeviceHandle(), &info, nullptr, &m_SwapChainFrameBufferHandles[i]));
 	}
 
 	m_DeletionQueue.Add([=]()
 						{
 							for (auto fb : m_SwapChainFrameBufferHandles)
-								vkDestroyFramebuffer(m_LogicalDeviceHandle, fb, nullptr);
+								vkDestroyFramebuffer(m_Device->GetLogicalDeviceHandle(), fb, nullptr);
 						});
 }
 
@@ -718,10 +382,10 @@ void App::CreateDescriptorPool()
 	poolInfo.poolSizeCount = 1;
 	poolInfo.pPoolSizes = &poolSize;
 
-	VK_CHECK(vkCreateDescriptorPool(m_LogicalDeviceHandle, &poolInfo, nullptr, &m_GlobalDescriptorPoolHandle));
+	VK_CHECK(vkCreateDescriptorPool(m_Device->GetLogicalDeviceHandle(), &poolInfo, nullptr, &m_GlobalDescriptorPoolHandle));
 
 	m_DeletionQueue.Add([=]()
-						{ vkDestroyDescriptorPool(m_LogicalDeviceHandle, m_GlobalDescriptorPoolHandle, nullptr); });
+						{ vkDestroyDescriptorPool(m_Device->GetLogicalDeviceHandle(), m_GlobalDescriptorPoolHandle, nullptr); });
 }
 
 void App::CreatePipelineCache()
@@ -733,10 +397,10 @@ void App::CreatePipelineCache()
 	info.initialDataSize = 0;
 	info.pInitialData = nullptr;
 
-	VK_CHECK(vkCreatePipelineCache(m_LogicalDeviceHandle, &info, nullptr, &m_GlobalPipelineCacheHandle));
+	VK_CHECK(vkCreatePipelineCache(m_Device->GetLogicalDeviceHandle(), &info, nullptr, &m_GlobalPipelineCacheHandle));
 
 	m_DeletionQueue.Add([=]()
-						{ vkDestroyPipelineCache(m_LogicalDeviceHandle, m_GlobalPipelineCacheHandle, nullptr); });
+						{ vkDestroyPipelineCache(m_Device->GetLogicalDeviceHandle(), m_GlobalPipelineCacheHandle, nullptr); });
 }
 
 void App::CreatePackedParticleBuffer()
@@ -749,24 +413,24 @@ void App::CreatePackedParticleBuffer()
 	bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-	VK_CHECK(vkCreateBuffer(m_LogicalDeviceHandle, &bufferInfo, nullptr, &m_PackedParticlesBufferHandle));
+	VK_CHECK(vkCreateBuffer(m_Device->GetLogicalDeviceHandle(), &bufferInfo, nullptr, &m_PackedParticlesBufferHandle));
 
 	VkMemoryRequirements memRequirements;
-	vkGetBufferMemoryRequirements(m_LogicalDeviceHandle, m_PackedParticlesBufferHandle, &memRequirements);
+	vkGetBufferMemoryRequirements(m_Device->GetLogicalDeviceHandle(), m_PackedParticlesBufferHandle, &memRequirements);
 
 	VkMemoryAllocateInfo allocInfo{};
 	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	allocInfo.allocationSize = memRequirements.size;
-	allocInfo.memoryTypeIndex = FindMemoryType(m_PhysicalDeviceHandle, memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	allocInfo.memoryTypeIndex = m_Device->FindMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-	VK_CHECK(vkAllocateMemory(m_LogicalDeviceHandle, &allocInfo, nullptr, &m_PackedParticleBufferMemoryHandle));
+	VK_CHECK(vkAllocateMemory(m_Device->GetLogicalDeviceHandle(), &allocInfo, nullptr, &m_PackedParticleBufferMemoryHandle));
 
-	vkBindBufferMemory(m_LogicalDeviceHandle, m_PackedParticlesBufferHandle, m_PackedParticleBufferMemoryHandle, 0);
+	vkBindBufferMemory(m_Device->GetLogicalDeviceHandle(), m_PackedParticlesBufferHandle, m_PackedParticleBufferMemoryHandle, 0);
 
 	m_DeletionQueue.Add([=]()
 						{
-							vkDestroyBuffer(m_LogicalDeviceHandle, m_PackedParticlesBufferHandle, nullptr);
-							vkFreeMemory(m_LogicalDeviceHandle, m_PackedParticleBufferMemoryHandle, nullptr);
+							vkDestroyBuffer(m_Device->GetLogicalDeviceHandle(), m_PackedParticlesBufferHandle, nullptr);
+							vkFreeMemory(m_Device->GetLogicalDeviceHandle(), m_PackedParticleBufferMemoryHandle, nullptr);
 						});
 }
 
@@ -781,16 +445,16 @@ void App::CreateGraphicsPipelineLayout()
 	info.pushConstantRangeCount = 0;
 	info.pPushConstantRanges = nullptr;
 
-	VK_CHECK(vkCreatePipelineLayout(m_LogicalDeviceHandle, &info, nullptr, &m_GraphicsPipelineLayoutHandle));
+	VK_CHECK(vkCreatePipelineLayout(m_Device->GetLogicalDeviceHandle(), &info, nullptr, &m_GraphicsPipelineLayoutHandle));
 
 	m_DeletionQueue.Add([=]()
-						{ vkDestroyPipelineLayout(m_LogicalDeviceHandle, m_GraphicsPipelineLayoutHandle, nullptr); });
+						{ vkDestroyPipelineLayout(m_Device->GetLogicalDeviceHandle(), m_GraphicsPipelineLayoutHandle, nullptr); });
 }
 
 void App::CreateGraphicsPipeline()
 {
-	VkShaderModule vertShaderModule = CreateShaderModuleFromSpirvFile(m_LogicalDeviceHandle, "particle.vert.spv");
-	VkShaderModule fragShaderModule = CreateShaderModuleFromSpirvFile(m_LogicalDeviceHandle, "particle.frag.spv");
+	VkShaderModule vertShaderModule = CreateShaderModuleFromSpirvFile(m_Device->GetLogicalDeviceHandle(), "particle.vert.spv");
+	VkShaderModule fragShaderModule = CreateShaderModuleFromSpirvFile(m_Device->GetLogicalDeviceHandle(), "particle.frag.spv");
 
 	VkPipelineShaderStageCreateInfo vertStageInfo = {};
 	vertStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -844,13 +508,13 @@ void App::CreateGraphicsPipeline()
 	VkViewport viewPort = {};
 	viewPort.x = 0;
 	viewPort.y = 0;
-	viewPort.width = (float)m_SwapChainExtent.width;
-	viewPort.height = (float)m_SwapChainExtent.height;
+	viewPort.width = (float)m_SwapChain->GetSwapChainExtent().width;
+	viewPort.height = (float)m_SwapChain->GetSwapChainExtent().height;
 	viewPort.minDepth = 0;
 	viewPort.maxDepth = 1;
 
 	VkRect2D scissor = {};
-	scissor.extent = m_SwapChainExtent;
+	scissor.extent = m_SwapChain->GetSwapChainExtent();
 	scissor.offset = {0, 0};
 
 	VkPipelineViewportStateCreateInfo viewportStateInfo = {};
@@ -932,13 +596,13 @@ void App::CreateGraphicsPipeline()
 	graphicsPIpelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
 	graphicsPIpelineCreateInfo.basePipelineIndex = -1;
 
-	VK_CHECK(vkCreateGraphicsPipelines(m_LogicalDeviceHandle, m_GlobalPipelineCacheHandle, 1, &graphicsPIpelineCreateInfo, nullptr, &m_GraphicePipelineHandle));
+	VK_CHECK(vkCreateGraphicsPipelines(m_Device->GetLogicalDeviceHandle(), m_GlobalPipelineCacheHandle, 1, &graphicsPIpelineCreateInfo, nullptr, &m_GraphicePipelineHandle));
 
-	vkDestroyShaderModule(m_LogicalDeviceHandle, vertShaderModule, nullptr);
-	vkDestroyShaderModule(m_LogicalDeviceHandle, fragShaderModule, nullptr);
+	vkDestroyShaderModule(m_Device->GetLogicalDeviceHandle(), vertShaderModule, nullptr);
+	vkDestroyShaderModule(m_Device->GetLogicalDeviceHandle(), fragShaderModule, nullptr);
 
 	m_DeletionQueue.Add([=]()
-						{ vkDestroyPipeline(m_LogicalDeviceHandle, m_GraphicePipelineHandle, nullptr); });
+						{ vkDestroyPipeline(m_Device->GetLogicalDeviceHandle(), m_GraphicePipelineHandle, nullptr); });
 }
 
 void App::CreateGraphicsCommandPool()
@@ -947,12 +611,12 @@ void App::CreateGraphicsCommandPool()
 	info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 	info.pNext = nullptr;
 	info.flags = 0;
-	info.queueFamilyIndex = m_QueueIndices.graphicsFamily.value();
+	info.queueFamilyIndex = m_Device->GetQueueIndices().graphicsFamily.value();
 
-	VK_CHECK(vkCreateCommandPool(m_LogicalDeviceHandle, &info, nullptr, &m_GraphicsCommandPoolHandle));
+	VK_CHECK(vkCreateCommandPool(m_Device->GetLogicalDeviceHandle(), &info, nullptr, &m_GraphicsCommandPoolHandle));
 
 	m_DeletionQueue.Add([=]()
-						{ vkDestroyCommandPool(m_LogicalDeviceHandle, m_GraphicsCommandPoolHandle, nullptr); });
+						{ vkDestroyCommandPool(m_Device->GetLogicalDeviceHandle(), m_GraphicsCommandPoolHandle, nullptr); });
 }
 
 void App::CreateGraphicsCommandBuffers()
@@ -965,10 +629,10 @@ void App::CreateGraphicsCommandBuffers()
 	bufferAllocInfo.commandPool = m_GraphicsCommandPoolHandle;
 	bufferAllocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 
-	VK_CHECK(vkAllocateCommandBuffers(m_LogicalDeviceHandle, &bufferAllocInfo, m_GraphicsCommandBufferHandles.data()));
+	VK_CHECK(vkAllocateCommandBuffers(m_Device->GetLogicalDeviceHandle(), &bufferAllocInfo, m_GraphicsCommandBufferHandles.data()));
 
 	m_DeletionQueue.Add([=]()
-						{ vkFreeCommandBuffers(m_LogicalDeviceHandle, m_GraphicsCommandPoolHandle, m_GraphicsCommandBufferHandles.size(), m_GraphicsCommandBufferHandles.data()); });
+						{ vkFreeCommandBuffers(m_Device->GetLogicalDeviceHandle(), m_GraphicsCommandPoolHandle, m_GraphicsCommandBufferHandles.size(), m_GraphicsCommandBufferHandles.data()); });
 }
 
 void App::CreateSemaphores()
@@ -978,13 +642,13 @@ void App::CreateSemaphores()
 	info.pNext = nullptr;
 	info.flags = 0;
 
-	VK_CHECK(vkCreateSemaphore(m_LogicalDeviceHandle, &info, nullptr, &m_ImageAvailableSemaphoreHandle));
-	VK_CHECK(vkCreateSemaphore(m_LogicalDeviceHandle, &info, nullptr, &m_RenderFinishedSemaphoreHandle));
+	VK_CHECK(vkCreateSemaphore(m_Device->GetLogicalDeviceHandle(), &info, nullptr, &m_ImageAvailableSemaphoreHandle));
+	VK_CHECK(vkCreateSemaphore(m_Device->GetLogicalDeviceHandle(), &info, nullptr, &m_RenderFinishedSemaphoreHandle));
 
 	m_DeletionQueue.Add([=]()
 						{
-							vkDestroySemaphore(m_LogicalDeviceHandle, m_RenderFinishedSemaphoreHandle, nullptr);
-							vkDestroySemaphore(m_LogicalDeviceHandle, m_ImageAvailableSemaphoreHandle, nullptr);
+							vkDestroySemaphore(m_Device->GetLogicalDeviceHandle(), m_RenderFinishedSemaphoreHandle, nullptr);
+							vkDestroySemaphore(m_Device->GetLogicalDeviceHandle(), m_ImageAvailableSemaphoreHandle, nullptr);
 						});
 }
 
@@ -1029,10 +693,10 @@ void App::CreateComputeDescriptorSetLayout()
 	descriptorSetLayoutInfo.bindingCount = 5;
 	descriptorSetLayoutInfo.pBindings = descriptorSetLayoutBindings;
 
-	VK_CHECK(vkCreateDescriptorSetLayout(m_LogicalDeviceHandle, &descriptorSetLayoutInfo, nullptr, &m_ComputeDescriptorSetLayoutHandle));
+	VK_CHECK(vkCreateDescriptorSetLayout(m_Device->GetLogicalDeviceHandle(), &descriptorSetLayoutInfo, nullptr, &m_ComputeDescriptorSetLayoutHandle));
 
 	m_DeletionQueue.Add([=]()
-						{ vkDestroyDescriptorSetLayout(m_LogicalDeviceHandle, m_ComputeDescriptorSetLayoutHandle, nullptr); });
+						{ vkDestroyDescriptorSetLayout(m_Device->GetLogicalDeviceHandle(), m_ComputeDescriptorSetLayoutHandle, nullptr); });
 }
 
 void App::UpdateComputeDescriptorSets()
@@ -1044,7 +708,7 @@ void App::UpdateComputeDescriptorSets()
 	descriptorSetAllocInfo.descriptorPool = m_GlobalDescriptorPoolHandle;
 	descriptorSetAllocInfo.descriptorSetCount = 1;
 
-	VK_CHECK(vkAllocateDescriptorSets(m_LogicalDeviceHandle, &descriptorSetAllocInfo, &m_ComputeDescriptorSetHandle));
+	VK_CHECK(vkAllocateDescriptorSets(m_Device->GetLogicalDeviceHandle(), &descriptorSetAllocInfo, &m_ComputeDescriptorSetHandle));
 
 	VkDescriptorBufferInfo descriptorBufferInfos[5];
 	descriptorBufferInfos[0].buffer = m_PackedParticlesBufferHandle;
@@ -1123,7 +787,7 @@ void App::UpdateComputeDescriptorSets()
 	writeDescriptorSets[4].pBufferInfo = &descriptorBufferInfos[4];
 	writeDescriptorSets[4].pTexelBufferView = nullptr;
 
-	vkUpdateDescriptorSets(m_LogicalDeviceHandle, 5, writeDescriptorSets, 0, nullptr);
+	vkUpdateDescriptorSets(m_Device->GetLogicalDeviceHandle(), 5, writeDescriptorSets, 0, nullptr);
 }
 
 void App::CreateComputePipelineLayout()
@@ -1137,15 +801,15 @@ void App::CreateComputePipelineLayout()
 	info.pushConstantRangeCount = 0;
 	info.pPushConstantRanges = nullptr;
 
-	VK_CHECK(vkCreatePipelineLayout(m_LogicalDeviceHandle, &info, nullptr, &m_ComputePipelineLayoutHandle));
+	VK_CHECK(vkCreatePipelineLayout(m_Device->GetLogicalDeviceHandle(), &info, nullptr, &m_ComputePipelineLayoutHandle));
 
 	m_DeletionQueue.Add([=]()
-						{ vkDestroyPipelineLayout(m_LogicalDeviceHandle, m_ComputePipelineLayoutHandle, nullptr); });
+						{ vkDestroyPipelineLayout(m_Device->GetLogicalDeviceHandle(), m_ComputePipelineLayoutHandle, nullptr); });
 }
 
 void App::CreateComputePipelines()
 {
-	VkShaderModule computeDensityPressureShaderModule = CreateShaderModuleFromSpirvFile(m_LogicalDeviceHandle, "density_pressure.comp.spv");
+	VkShaderModule computeDensityPressureShaderModule = CreateShaderModuleFromSpirvFile(m_Device->GetLogicalDeviceHandle(), "density_pressure.comp.spv");
 
 	VkPipelineShaderStageCreateInfo computeShaderStageCreateInfo{};
 	computeShaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -1165,28 +829,28 @@ void App::CreateComputePipelines()
 	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 	pipelineInfo.basePipelineIndex = -1;
 
-	VK_CHECK(vkCreateComputePipelines(m_LogicalDeviceHandle, m_GlobalPipelineCacheHandle, 1, &pipelineInfo, nullptr, &m_ComputePipelineHandles[0]));
+	VK_CHECK(vkCreateComputePipelines(m_Device->GetLogicalDeviceHandle(), m_GlobalPipelineCacheHandle, 1, &pipelineInfo, nullptr, &m_ComputePipelineHandles[0]));
 
-	VkShaderModule computeForceShaderModule = CreateShaderModuleFromSpirvFile(m_LogicalDeviceHandle, "force.comp.spv");
+	VkShaderModule computeForceShaderModule = CreateShaderModuleFromSpirvFile(m_Device->GetLogicalDeviceHandle(), "force.comp.spv");
 
 	computeShaderStageCreateInfo.module = computeForceShaderModule;
 	pipelineInfo.stage = computeShaderStageCreateInfo;
 
-	VK_CHECK(vkCreateComputePipelines(m_LogicalDeviceHandle, m_GlobalPipelineCacheHandle, 1, &pipelineInfo, nullptr, &m_ComputePipelineHandles[1]));
+	VK_CHECK(vkCreateComputePipelines(m_Device->GetLogicalDeviceHandle(), m_GlobalPipelineCacheHandle, 1, &pipelineInfo, nullptr, &m_ComputePipelineHandles[1]));
 
-	VkShaderModule computeIntegrateShaderModule = CreateShaderModuleFromSpirvFile(m_LogicalDeviceHandle, "integrate.comp.spv");
+	VkShaderModule computeIntegrateShaderModule = CreateShaderModuleFromSpirvFile(m_Device->GetLogicalDeviceHandle(), "integrate.comp.spv");
 	computeShaderStageCreateInfo.module = computeIntegrateShaderModule;
 	pipelineInfo.stage = computeShaderStageCreateInfo;
-	VK_CHECK(vkCreateComputePipelines(m_LogicalDeviceHandle, m_GlobalPipelineCacheHandle, 1, &pipelineInfo, nullptr, &m_ComputePipelineHandles[2]));
+	VK_CHECK(vkCreateComputePipelines(m_Device->GetLogicalDeviceHandle(), m_GlobalPipelineCacheHandle, 1, &pipelineInfo, nullptr, &m_ComputePipelineHandles[2]));
 
-	vkDestroyShaderModule(m_LogicalDeviceHandle, computeIntegrateShaderModule, nullptr);
-	vkDestroyShaderModule(m_LogicalDeviceHandle, computeForceShaderModule, nullptr);
-	vkDestroyShaderModule(m_LogicalDeviceHandle, computeDensityPressureShaderModule, nullptr);
+	vkDestroyShaderModule(m_Device->GetLogicalDeviceHandle(), computeIntegrateShaderModule, nullptr);
+	vkDestroyShaderModule(m_Device->GetLogicalDeviceHandle(), computeForceShaderModule, nullptr);
+	vkDestroyShaderModule(m_Device->GetLogicalDeviceHandle(), computeDensityPressureShaderModule, nullptr);
 
 	m_DeletionQueue.Add([=]()
 						{
 							for (const auto &compPipe : m_ComputePipelineHandles)
-								vkDestroyPipeline(m_LogicalDeviceHandle, compPipe, nullptr);
+								vkDestroyPipeline(m_Device->GetLogicalDeviceHandle(), compPipe, nullptr);
 						});
 }
 
@@ -1196,12 +860,12 @@ void App::CreateComputeCommandPool()
 	info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 	info.pNext = nullptr;
 	info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-	info.queueFamilyIndex = m_QueueIndices.computeFamily.value();
+	info.queueFamilyIndex = m_Device->GetQueueIndices().computeFamily.value();
 
-	VK_CHECK(vkCreateCommandPool(m_LogicalDeviceHandle, &info, nullptr, &m_ComputeCommandPoolHandle));
+	VK_CHECK(vkCreateCommandPool(m_Device->GetLogicalDeviceHandle(), &info, nullptr, &m_ComputeCommandPoolHandle));
 
 	m_DeletionQueue.Add([=]()
-						{ vkDestroyCommandPool(m_LogicalDeviceHandle, m_ComputeCommandPoolHandle, nullptr); });
+						{ vkDestroyCommandPool(m_Device->GetLogicalDeviceHandle(), m_ComputeCommandPoolHandle, nullptr); });
 }
 
 void App::CreateComputeCommandBuffer()
@@ -1213,10 +877,10 @@ void App::CreateComputeCommandBuffer()
 	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 	allocInfo.commandBufferCount = 1;
 
-	VK_CHECK(vkAllocateCommandBuffers(m_LogicalDeviceHandle, &allocInfo, &m_ComputeCommandBufferHandle));
+	VK_CHECK(vkAllocateCommandBuffers(m_Device->GetLogicalDeviceHandle(), &allocInfo, &m_ComputeCommandBufferHandle));
 
 	m_DeletionQueue.Add([=]()
-						{ vkFreeCommandBuffers(m_LogicalDeviceHandle, m_ComputeCommandPoolHandle, 1, &m_ComputeCommandBufferHandle); });
+						{ vkFreeCommandBuffers(m_Device->GetLogicalDeviceHandle(), m_ComputeCommandPoolHandle, 1, &m_ComputeCommandBufferHandle); });
 }
 
 void App::InitParticleData(std::array<glm::vec2, PARTICLE_NUM> initParticlePosition)
@@ -1230,36 +894,34 @@ void App::InitParticleData(std::array<glm::vec2, PARTICLE_NUM> initParticlePosit
 	stagingBufferCreateInfo.flags = 0;
 	stagingBufferCreateInfo.size = m_PackedBufferSize;
 	stagingBufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-	if (m_QueueIndices.graphicsFamily != m_QueueIndices.presentFamily ||
-		m_QueueIndices.graphicsFamily != m_QueueIndices.computeFamily ||
-		m_QueueIndices.presentFamily != m_QueueIndices.computeFamily)
+	if (!m_Device->GetQueueIndices().IsSameFamily())
 		stagingBufferCreateInfo.sharingMode = VK_SHARING_MODE_CONCURRENT;
 	else
 		stagingBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	stagingBufferCreateInfo.queueFamilyIndexCount = 0;
 	stagingBufferCreateInfo.pQueueFamilyIndices = nullptr;
 
-	vkCreateBuffer(m_LogicalDeviceHandle, &stagingBufferCreateInfo, nullptr, &stagingBufferHandle);
+	vkCreateBuffer(m_Device->GetLogicalDeviceHandle(), &stagingBufferCreateInfo, nullptr, &stagingBufferHandle);
 
 	VkMemoryRequirements stagingBufferMemoryRequirements;
-	vkGetBufferMemoryRequirements(m_LogicalDeviceHandle, stagingBufferHandle, &stagingBufferMemoryRequirements);
+	vkGetBufferMemoryRequirements(m_Device->GetLogicalDeviceHandle(), stagingBufferHandle, &stagingBufferMemoryRequirements);
 
 	VkMemoryAllocateInfo stagingBufferMemoryAllocInfo;
 	stagingBufferMemoryAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	stagingBufferMemoryAllocInfo.pNext = nullptr;
 	stagingBufferMemoryAllocInfo.allocationSize = stagingBufferMemoryRequirements.size;
-	stagingBufferMemoryAllocInfo.memoryTypeIndex = FindMemoryType(m_PhysicalDeviceHandle, stagingBufferMemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	stagingBufferMemoryAllocInfo.memoryTypeIndex = m_Device->FindMemoryType(stagingBufferMemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
-	VK_CHECK(vkAllocateMemory(m_LogicalDeviceHandle, &stagingBufferMemoryAllocInfo, nullptr, &stagingBufferDeviceMemoryHandle));
+	VK_CHECK(vkAllocateMemory(m_Device->GetLogicalDeviceHandle(), &stagingBufferMemoryAllocInfo, nullptr, &stagingBufferDeviceMemoryHandle));
 
-	vkBindBufferMemory(m_LogicalDeviceHandle, stagingBufferHandle, stagingBufferDeviceMemoryHandle, 0);
+	vkBindBufferMemory(m_Device->GetLogicalDeviceHandle(), stagingBufferHandle, stagingBufferDeviceMemoryHandle, 0);
 
 	void *mappedMemory = nullptr;
-	vkMapMemory(m_LogicalDeviceHandle, stagingBufferDeviceMemoryHandle, 0, stagingBufferMemoryRequirements.size, 0, &mappedMemory);
+	vkMapMemory(m_Device->GetLogicalDeviceHandle(), stagingBufferDeviceMemoryHandle, 0, stagingBufferMemoryRequirements.size, 0, &mappedMemory);
 
 	std::memset(mappedMemory, 0, m_PackedBufferSize);
 	std::memcpy(mappedMemory, initParticlePosition.data(), m_PosSsboSize);
-	vkUnmapMemory(m_LogicalDeviceHandle, stagingBufferDeviceMemoryHandle);
+	vkUnmapMemory(m_Device->GetLogicalDeviceHandle(), stagingBufferDeviceMemoryHandle);
 
 	VkCommandBuffer copyCommandBufferHandle;
 	VkCommandBufferAllocateInfo copyCommandBufferAllocInfo;
@@ -1269,7 +931,7 @@ void App::InitParticleData(std::array<glm::vec2, PARTICLE_NUM> initParticlePosit
 	copyCommandBufferAllocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 	copyCommandBufferAllocInfo.commandBufferCount = 1;
 
-	VK_CHECK(vkAllocateCommandBuffers(m_LogicalDeviceHandle, &copyCommandBufferAllocInfo, &copyCommandBufferHandle));
+	VK_CHECK(vkAllocateCommandBuffers(m_Device->GetLogicalDeviceHandle(), &copyCommandBufferAllocInfo, &copyCommandBufferHandle));
 
 	VkCommandBufferBeginInfo commandBufferBeginInfo;
 	commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -1299,10 +961,10 @@ void App::InitParticleData(std::array<glm::vec2, PARTICLE_NUM> initParticlePosit
 	copySubmitInfo.signalSemaphoreCount = 0;
 	copySubmitInfo.pSignalSemaphores = nullptr;
 
-	VK_CHECK(vkQueueSubmit(m_ComputeQueueHandle, 1, &copySubmitInfo, VK_NULL_HANDLE));
-	VK_CHECK(vkQueueWaitIdle(m_ComputeQueueHandle));
+	VK_CHECK(m_Device->GetComputeQueue()->Submit(1, &copySubmitInfo, VK_NULL_HANDLE));
+	VK_CHECK(m_Device->GetComputeQueue()->WaitIdle());
 
-	vkFreeCommandBuffers(m_LogicalDeviceHandle, m_ComputeCommandPoolHandle, 1, &copyCommandBufferHandle);
-	vkFreeMemory(m_LogicalDeviceHandle, stagingBufferDeviceMemoryHandle, nullptr);
-	vkDestroyBuffer(m_LogicalDeviceHandle, stagingBufferHandle, nullptr);
+	vkFreeCommandBuffers(m_Device->GetLogicalDeviceHandle(), m_ComputeCommandPoolHandle, 1, &copyCommandBufferHandle);
+	vkFreeMemory(m_Device->GetLogicalDeviceHandle(), stagingBufferDeviceMemoryHandle, nullptr);
+	vkDestroyBuffer(m_Device->GetLogicalDeviceHandle(), stagingBufferHandle, nullptr);
 }

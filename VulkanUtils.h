@@ -62,9 +62,4 @@ VkSurfaceFormatKHR ChooseSwapChainSurfaceFormat(const std::vector<VkSurfaceForma
 VkPresentModeKHR ChooseSwapChainPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
 VkExtent2D ChooseSwapChainExtent(SDL_Window* window, const VkSurfaceCapabilitiesKHR& capabilities);
 
-std::vector<VkImage> GetSwapChainImages(VkDevice device, VkSwapchainKHR swapChain);
-std::vector<VkImageView> CreateSwapChainImageViews(VkDevice device, const std::vector<VkImage>& images, VkFormat format);
-
-uint32_t FindMemoryType(VkPhysicalDevice device, uint32_t typeFilter, VkMemoryPropertyFlags properties);
-
 VkShaderModule CreateShaderModuleFromSpirvFile(VkDevice device, std::string_view filePath);
