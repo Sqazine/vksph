@@ -84,24 +84,24 @@ VulkanSwapChain::~VulkanSwapChain()
     vkDestroySwapchainKHR(m_TmpVulkanDevice->GetLogicalDeviceHandle(), m_SwapChainHandle, nullptr);
 }
 
-const VkSwapchainKHR &VulkanSwapChain::GetSwapChainHandle() const
+const VkSwapchainKHR &VulkanSwapChain::GetVKSwapChainHandle() const
 {
     return m_SwapChainHandle;
 }
-const std::vector<VkImage> &VulkanSwapChain::GetSwapChainImages() const
+const std::vector<VkImage> &VulkanSwapChain::GetVKSwapChainImages() const
 {
     return m_SwapChainImages;
 }
-const std::vector<VkImageView> &VulkanSwapChain::GetSwapChainImageViews() const
+const std::vector<VkImageView> &VulkanSwapChain::GetVKSwapChainImageViews() const
 {
     return m_SwapChainImageViews;
 }
 
-const VkFormat &VulkanSwapChain::GetSwapChainImageFormat() const
+const VkFormat &VulkanSwapChain::GetVKSwapChainImageFormat() const
 {
     return m_SwapChainImageFormat;
 }
-const VkExtent2D &VulkanSwapChain::GetSwapChainExtent() const
+const VkExtent2D &VulkanSwapChain::GetVKSwapChainExtent() const
 {
     return m_SwapChainExtent;
 }

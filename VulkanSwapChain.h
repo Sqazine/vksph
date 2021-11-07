@@ -9,12 +9,12 @@ public:
     VulkanSwapChain(SDL_Window *window, const VulkanInstance *instance, const VulkanDevice *device);
     ~VulkanSwapChain();
 
-    const VkSwapchainKHR &GetSwapChainHandle() const;
-    const std::vector<VkImage>& GetSwapChainImages() const;
-    const std::vector<VkImageView>& GetSwapChainImageViews() const;
+    const VkSwapchainKHR &GetVKSwapChainHandle() const;
+    const std::vector<VkImage>& GetVKSwapChainImages() const;
+    const std::vector<VkImageView>& GetVKSwapChainImageViews() const;
 
-    const VkFormat& GetSwapChainImageFormat() const;
-    const VkExtent2D& GetSwapChainExtent() const;
+    const VkFormat& GetVKSwapChainImageFormat() const;
+    const VkExtent2D& GetVKSwapChainExtent() const;
 private:
     VkSwapchainKHR m_SwapChainHandle;
     std::vector<VkImage> m_SwapChainImages;

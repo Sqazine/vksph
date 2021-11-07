@@ -51,8 +51,8 @@ void App::Init()
 	m_Instance = std::make_unique<VulkanInstance>(m_WindowHandle, validationLayers);
 	m_Device = std::make_unique<VulkanDevice>(m_Instance.get(), deviceExtensions);
 	m_SwapChain=std::make_unique<VulkanSwapChain>(m_WindowHandle,m_Instance.get(),m_Device.get());
+	m_RenderPass=std::make_unique<VulkanRenderPass>(m_Device.get(),m_SwapChain.get());
 
-	CreateRenderPass();
 	CreateSwapChainFrameBuffers();
 	CreateDescriptorPool();
 	CreatePipelineCache();
@@ -205,10 +205,10 @@ void App::Draw()
 		VkRenderPassBeginInfo renderPassBeginInfo;
 		renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 		renderPassBeginInfo.pNext = nullptr;
-		renderPassBeginInfo.renderPass = m_RenderPassHandle;
+		renderPassBeginInfo.renderPass = m_RenderPass->GetVKRenderPassHandle();
 		renderPassBeginInfo.framebuffer = m_SwapChainFrameBufferHandles[i];
 		renderPassBeginInfo.renderArea.offset = {0, 0};
-		renderPassBeginInfo.renderArea.extent = m_SwapChain->GetSwapChainExtent();
+		renderPassBeginInfo.renderArea.extent = m_SwapChain->GetVKSwapChainExtent();
 		renderPassBeginInfo.clearValueCount = 1;
 		renderPassBeginInfo.pClearValues = &clearValue;
 
@@ -217,13 +217,13 @@ void App::Draw()
 		VkViewport viewPort;
 		viewPort.x = 0;
 		viewPort.y = 0;
-		viewPort.width = m_SwapChain->GetSwapChainExtent().width;
-		viewPort.height = m_SwapChain->GetSwapChainExtent().height;
+		viewPort.width = m_SwapChain->GetVKSwapChainExtent().width;
+		viewPort.height = m_SwapChain->GetVKSwapChainExtent().height;
 		viewPort.minDepth = 0;
 		viewPort.maxDepth = 1;
 
 		VkRect2D scissor;
-		scissor.extent = m_SwapChain->GetSwapChainExtent();
+		scissor.extent = m_SwapChain->GetVKSwapChainExtent();
 		scissor.offset = {0, 0};
 
 		vkCmdSetViewport(m_GraphicsCommandBufferHandles[i], 0, 1, &viewPort);
@@ -240,7 +240,7 @@ void App::Draw()
 
 void App::SubmitAndPresent()
 {
-	vkAcquireNextImageKHR(m_Device->GetLogicalDeviceHandle(), m_SwapChain->GetSwapChainHandle(), UINT64_MAX, m_ImageAvailableSemaphoreHandle, VK_NULL_HANDLE, &m_SwapChainImageIndex);
+	vkAcquireNextImageKHR(m_Device->GetLogicalDeviceHandle(), m_SwapChain->GetVKSwapChainHandle(), UINT64_MAX, m_ImageAvailableSemaphoreHandle, VK_NULL_HANDLE, &m_SwapChainImageIndex);
 
 	VkSubmitInfo graphicsSubmitInfo{};
 	graphicsSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -261,7 +261,7 @@ void App::SubmitAndPresent()
 	presentInfo.waitSemaphoreCount = 1;
 	presentInfo.pWaitSemaphores = &m_RenderFinishedSemaphoreHandle;
 	presentInfo.swapchainCount = 1;
-	presentInfo.pSwapchains = &m_SwapChain->GetSwapChainHandle();
+	presentInfo.pSwapchains = &m_SwapChain->GetVKSwapChainHandle();
 	presentInfo.pImageIndices = &m_SwapChainImageIndex;
 	presentInfo.pResults = nullptr;
 
@@ -307,55 +307,21 @@ void App::LoadVulkanLib()
 						{ SDL_Vulkan_UnloadLibrary(); });
 }
 
-void App::CreateRenderPass()
-{
-	VkAttachmentDescription colorAttachment{};
-	colorAttachment.format = m_SwapChain->GetSwapChainImageFormat();
-	colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-	colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-	colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-	colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-	colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-	VkAttachmentReference colorAttachmentRef = {};
-	colorAttachmentRef.attachment = 0;
-	colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-	VkSubpassDescription subpass{};
-	subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-	subpass.colorAttachmentCount = 1;
-	subpass.pColorAttachments = &colorAttachmentRef;
-
-	VkRenderPassCreateInfo renderPassInfo{};
-	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-	renderPassInfo.attachmentCount = 1;
-	renderPassInfo.pAttachments = &colorAttachment;
-	renderPassInfo.subpassCount = 1;
-	renderPassInfo.pSubpasses = &subpass;
-
-	VK_CHECK(vkCreateRenderPass(m_Device->GetLogicalDeviceHandle(), &renderPassInfo, nullptr, &m_RenderPassHandle));
-
-	m_DeletionQueue.Add([=]()
-						{ vkDestroyRenderPass(m_Device->GetLogicalDeviceHandle(), m_RenderPassHandle, nullptr); });
-}
-
 void App::CreateSwapChainFrameBuffers()
 {
-	m_SwapChainFrameBufferHandles.resize(m_SwapChain->GetSwapChainImageViews().size());
+	m_SwapChainFrameBufferHandles.resize(m_SwapChain->GetVKSwapChainImageViews().size());
 
-	for (size_t i = 0; i < m_SwapChain->GetSwapChainImageViews().size(); ++i)
+	for (size_t i = 0; i < m_SwapChain->GetVKSwapChainImageViews().size(); ++i)
 	{
 		VkFramebufferCreateInfo info;
 		info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 		info.pNext = nullptr;
 		info.flags = 0;
-		info.renderPass = m_RenderPassHandle;
+		info.renderPass = m_RenderPass->GetVKRenderPassHandle();
 		info.attachmentCount = 1;
-		info.pAttachments = &m_SwapChain->GetSwapChainImageViews()[i];
-		info.width = m_SwapChain->GetSwapChainExtent().width;
-		info.height = m_SwapChain->GetSwapChainExtent().height;
+		info.pAttachments = &m_SwapChain->GetVKSwapChainImageViews()[i];
+		info.width = m_SwapChain->GetVKSwapChainExtent().width;
+		info.height = m_SwapChain->GetVKSwapChainExtent().height;
 		info.layers = 1;
 
 		VK_CHECK(vkCreateFramebuffer(m_Device->GetLogicalDeviceHandle(), &info, nullptr, &m_SwapChainFrameBufferHandles[i]));
@@ -508,13 +474,13 @@ void App::CreateGraphicsPipeline()
 	VkViewport viewPort = {};
 	viewPort.x = 0;
 	viewPort.y = 0;
-	viewPort.width = (float)m_SwapChain->GetSwapChainExtent().width;
-	viewPort.height = (float)m_SwapChain->GetSwapChainExtent().height;
+	viewPort.width = (float)m_SwapChain->GetVKSwapChainExtent().width;
+	viewPort.height = (float)m_SwapChain->GetVKSwapChainExtent().height;
 	viewPort.minDepth = 0;
 	viewPort.maxDepth = 1;
 
 	VkRect2D scissor = {};
-	scissor.extent = m_SwapChain->GetSwapChainExtent();
+	scissor.extent = m_SwapChain->GetVKSwapChainExtent();
 	scissor.offset = {0, 0};
 
 	VkPipelineViewportStateCreateInfo viewportStateInfo = {};
@@ -575,28 +541,28 @@ void App::CreateGraphicsPipeline()
 	colorBlendStateInfo.blendConstants[2] = 0.0f;
 	colorBlendStateInfo.blendConstants[3] = 0.0f;
 
-	VkGraphicsPipelineCreateInfo graphicsPIpelineCreateInfo;
-	graphicsPIpelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-	graphicsPIpelineCreateInfo.pNext = nullptr;
-	graphicsPIpelineCreateInfo.flags = 0;
-	graphicsPIpelineCreateInfo.stageCount = shaderStageCreateInfos.size();
-	graphicsPIpelineCreateInfo.pStages = shaderStageCreateInfos.data();
-	graphicsPIpelineCreateInfo.pVertexInputState = &vertexInputStateInfo;
-	graphicsPIpelineCreateInfo.pInputAssemblyState = &inputAssemblyStateInfo;
-	graphicsPIpelineCreateInfo.pTessellationState = nullptr;
-	graphicsPIpelineCreateInfo.pViewportState = &viewportStateInfo;
-	graphicsPIpelineCreateInfo.pRasterizationState = &rasterizationStateInfo;
-	graphicsPIpelineCreateInfo.pMultisampleState = &multiSampleStateInfo;
-	graphicsPIpelineCreateInfo.pDepthStencilState = nullptr;
-	graphicsPIpelineCreateInfo.pColorBlendState = &colorBlendStateInfo;
-	graphicsPIpelineCreateInfo.pDynamicState = nullptr;
-	graphicsPIpelineCreateInfo.layout = m_GraphicsPipelineLayoutHandle;
-	graphicsPIpelineCreateInfo.renderPass = m_RenderPassHandle;
-	graphicsPIpelineCreateInfo.subpass = 0;
-	graphicsPIpelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
-	graphicsPIpelineCreateInfo.basePipelineIndex = -1;
+	VkGraphicsPipelineCreateInfo graphicsPipelineCreateInfo;
+	graphicsPipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+	graphicsPipelineCreateInfo.pNext = nullptr;
+	graphicsPipelineCreateInfo.flags = 0;
+	graphicsPipelineCreateInfo.stageCount = shaderStageCreateInfos.size();
+	graphicsPipelineCreateInfo.pStages = shaderStageCreateInfos.data();
+	graphicsPipelineCreateInfo.pVertexInputState = &vertexInputStateInfo;
+	graphicsPipelineCreateInfo.pInputAssemblyState = &inputAssemblyStateInfo;
+	graphicsPipelineCreateInfo.pTessellationState = nullptr;
+	graphicsPipelineCreateInfo.pViewportState = &viewportStateInfo;
+	graphicsPipelineCreateInfo.pRasterizationState = &rasterizationStateInfo;
+	graphicsPipelineCreateInfo.pMultisampleState = &multiSampleStateInfo;
+	graphicsPipelineCreateInfo.pDepthStencilState = nullptr;
+	graphicsPipelineCreateInfo.pColorBlendState = &colorBlendStateInfo;
+	graphicsPipelineCreateInfo.pDynamicState = nullptr;
+	graphicsPipelineCreateInfo.layout = m_GraphicsPipelineLayoutHandle;
+	graphicsPipelineCreateInfo.renderPass = m_RenderPass->GetVKRenderPassHandle();
+	graphicsPipelineCreateInfo.subpass = 0;
+	graphicsPipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
+	graphicsPipelineCreateInfo.basePipelineIndex = -1;
 
-	VK_CHECK(vkCreateGraphicsPipelines(m_Device->GetLogicalDeviceHandle(), m_GlobalPipelineCacheHandle, 1, &graphicsPIpelineCreateInfo, nullptr, &m_GraphicePipelineHandle));
+	VK_CHECK(vkCreateGraphicsPipelines(m_Device->GetLogicalDeviceHandle(), m_GlobalPipelineCacheHandle, 1, &graphicsPipelineCreateInfo, nullptr, &m_GraphicePipelineHandle));
 
 	vkDestroyShaderModule(m_Device->GetLogicalDeviceHandle(), vertShaderModule, nullptr);
 	vkDestroyShaderModule(m_Device->GetLogicalDeviceHandle(), fragShaderModule, nullptr);
