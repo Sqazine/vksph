@@ -25,13 +25,11 @@ VulkanSwapChain::VulkanSwapChain(SDL_Window *window, const VulkanInstance *insta
     createInfo.imageArrayLayers = 1;
     createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-    std::vector<uint32_t> uniIndices = {device->GetQueueIndices().graphicsFamily.value(), device->GetQueueIndices().presentFamily.value(), device->GetQueueIndices().computeFamily.value()};
-
     if (!device->GetQueueIndices().IsSameFamily())
     {
         createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-        createInfo.queueFamilyIndexCount = uniIndices.size();
-        createInfo.pQueueFamilyIndices = uniIndices.data();
+        createInfo.queueFamilyIndexCount = device->GetQueueIndices().FamilyIndexArray().size();
+        createInfo.pQueueFamilyIndices = device->GetQueueIndices().FamilyIndexArray().data();
     }
     else
     {

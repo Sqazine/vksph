@@ -127,7 +127,7 @@ QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surfa
 		if (present_support)
 			indices.presentFamily = i;
 
-		if (indices.isComplete())
+		if (indices.IsComplete())
 			break;
 
 		i++;

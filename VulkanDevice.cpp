@@ -126,7 +126,7 @@ VkPhysicalDevice VulkanDevice::SelectPhysicalDevice()
 
         bool extSatisfied = CheckExtensionSupport(m_NeededDeviceExtensions, phyDevExtensions);
 
-        if (extSatisfied && FindQueueFamilies(phyDev, m_TmpInstanceHandle->GetVKSurfaceKHRHandle()).isComplete())
+        if (extSatisfied && FindQueueFamilies(phyDev, m_TmpInstanceHandle->GetVKSurfaceKHRHandle()).IsComplete())
             result = phyDev;
         VkPhysicalDeviceProperties props = GetPhysicalDeviceProps(result);
         if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
