@@ -63,7 +63,8 @@ void App::Init()
 																				 m_SwapChain->GetVKSwapChainExtent().height));
 		}
 
-	CreateDescriptorPool();
+	m_GlobalDescriptorPool=std::make_unique<VulkanDescriptorPool>(m_Device->GetLogicalDeviceHandle(),5);
+
 	CreatePipelineCache();
 	CreateGraphicsPipelineLayout();
 	CreateGraphicsPipeline();
@@ -316,25 +317,6 @@ void App::LoadVulkanLib()
 						{ SDL_Vulkan_UnloadLibrary(); });
 }
 
-void App::CreateDescriptorPool()
-{
-	VkDescriptorPoolSize poolSize = {};
-	poolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-	poolSize.descriptorCount = 5;
-
-	VkDescriptorPoolCreateInfo poolInfo = {};
-	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	poolInfo.pNext = nullptr;
-	poolInfo.flags = 0;
-	poolInfo.maxSets = 1;
-	poolInfo.poolSizeCount = 1;
-	poolInfo.pPoolSizes = &poolSize;
-
-	VK_CHECK(vkCreateDescriptorPool(m_Device->GetLogicalDeviceHandle(), &poolInfo, nullptr, &m_GlobalDescriptorPoolHandle));
-
-	m_DeletionQueue.Add([=]()
-						{ vkDestroyDescriptorPool(m_Device->GetLogicalDeviceHandle(), m_GlobalDescriptorPoolHandle, nullptr); });
-}
 
 void App::CreatePipelineCache()
 {
@@ -653,7 +635,7 @@ void App::UpdateComputeDescriptorSets()
 	descriptorSetAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 	descriptorSetAllocInfo.pNext = nullptr;
 	descriptorSetAllocInfo.pSetLayouts = &m_ComputeDescriptorSetLayoutHandle;
-	descriptorSetAllocInfo.descriptorPool = m_GlobalDescriptorPoolHandle;
+	descriptorSetAllocInfo.descriptorPool = m_GlobalDescriptorPool->GetVKDescriptorPoolHandle();
 	descriptorSetAllocInfo.descriptorSetCount = 1;
 
 	VK_CHECK(vkAllocateDescriptorSets(m_Device->GetLogicalDeviceHandle(), &descriptorSetAllocInfo, &m_ComputeDescriptorSetHandle));
