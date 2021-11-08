@@ -50,10 +50,19 @@ void App::Init()
 
 	m_Instance = std::make_unique<VulkanInstance>(m_WindowHandle, validationLayers);
 	m_Device = std::make_unique<VulkanDevice>(m_Instance.get(), deviceExtensions);
-	m_SwapChain=std::make_unique<VulkanSwapChain>(m_WindowHandle,m_Instance.get(),m_Device.get());
-	m_RenderPass=std::make_unique<VulkanRenderPass>(m_Device.get(),m_SwapChain.get());
+	m_SwapChain = std::make_unique<VulkanSwapChain>(m_WindowHandle, m_Instance.get(), m_Device.get());
+	m_RenderPass = std::make_unique<VulkanRenderPass>(m_Device.get(), m_SwapChain.get());
 
-	CreateSwapChainFrameBuffers();
+	for (size_t i = 0; i < m_SwapChain->GetVKSwapChainImageViews().size(); ++i)
+		{
+			std::vector<VkImageView> views={m_SwapChain->GetVKSwapChainImageViews()[i]};
+			m_SwapChainFrameBuffers.emplace_back(std::make_unique<VulkanFramebuffer>(m_Device->GetLogicalDeviceHandle(),
+																				 m_RenderPass->GetVKRenderPassHandle(),
+																				 views,
+																				 m_SwapChain->GetVKSwapChainExtent().width,
+																				 m_SwapChain->GetVKSwapChainExtent().height));
+		}
+
 	CreateDescriptorPool();
 	CreatePipelineCache();
 	CreateGraphicsPipelineLayout();
@@ -206,7 +215,7 @@ void App::Draw()
 		renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 		renderPassBeginInfo.pNext = nullptr;
 		renderPassBeginInfo.renderPass = m_RenderPass->GetVKRenderPassHandle();
-		renderPassBeginInfo.framebuffer = m_SwapChainFrameBufferHandles[i];
+		renderPassBeginInfo.framebuffer = m_SwapChainFrameBuffers[i]->GetVKFramebufferHandle();
 		renderPassBeginInfo.renderArea.offset = {0, 0};
 		renderPassBeginInfo.renderArea.extent = m_SwapChain->GetVKSwapChainExtent();
 		renderPassBeginInfo.clearValueCount = 1;
@@ -305,33 +314,6 @@ void App::LoadVulkanLib()
 
 	m_DeletionQueue.Add([=]()
 						{ SDL_Vulkan_UnloadLibrary(); });
-}
-
-void App::CreateSwapChainFrameBuffers()
-{
-	m_SwapChainFrameBufferHandles.resize(m_SwapChain->GetVKSwapChainImageViews().size());
-
-	for (size_t i = 0; i < m_SwapChain->GetVKSwapChainImageViews().size(); ++i)
-	{
-		VkFramebufferCreateInfo info;
-		info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-		info.pNext = nullptr;
-		info.flags = 0;
-		info.renderPass = m_RenderPass->GetVKRenderPassHandle();
-		info.attachmentCount = 1;
-		info.pAttachments = &m_SwapChain->GetVKSwapChainImageViews()[i];
-		info.width = m_SwapChain->GetVKSwapChainExtent().width;
-		info.height = m_SwapChain->GetVKSwapChainExtent().height;
-		info.layers = 1;
-
-		VK_CHECK(vkCreateFramebuffer(m_Device->GetLogicalDeviceHandle(), &info, nullptr, &m_SwapChainFrameBufferHandles[i]));
-	}
-
-	m_DeletionQueue.Add([=]()
-						{
-							for (auto fb : m_SwapChainFrameBufferHandles)
-								vkDestroyFramebuffer(m_Device->GetLogicalDeviceHandle(), fb, nullptr);
-						});
 }
 
 void App::CreateDescriptorPool()
@@ -587,7 +569,7 @@ void App::CreateGraphicsCommandPool()
 
 void App::CreateGraphicsCommandBuffers()
 {
-	m_GraphicsCommandBufferHandles.resize(m_SwapChainFrameBufferHandles.size());
+	m_GraphicsCommandBufferHandles.resize(m_SwapChainFrameBuffers.size());
 	VkCommandBufferAllocateInfo bufferAllocInfo = {};
 	bufferAllocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 	bufferAllocInfo.pNext = nullptr;
