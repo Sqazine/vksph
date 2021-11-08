@@ -18,6 +18,8 @@
 #include "VulkanFramebuffer.h"
 #include "VulkanDescriptorPool.h"
 #include "VulkanPipelineCache.h"
+#include "VulkanSemaphore.h"
+#include "VulkanPipelineLayout.h"
 
 #define PARTICLE_NUM 20000
 #define PARTICLE_RADIUS 0.005f
@@ -69,9 +71,7 @@ private:
 	void CreateGraphicsPipeline();
 	void CreateGraphicsCommandPool();
 	void CreateGraphicsCommandBuffers();
-	void CreateSemaphores();
 	void CreateComputeDescriptorSetLayout();
-	void CreateComputePipelineLayout();
 	void CreateComputePipelines();
 	void CreateComputeCommandPool();
 	void CreateComputeCommandBuffer();
@@ -94,23 +94,21 @@ private:
 	std::unique_ptr<VulkanDescriptorPool> m_GlobalDescriptorPool;
 	std::unique_ptr<VulkanPipelineCache> m_GlobalPipelineCache;
 
-	VkPipelineCache m_GlobalPipelineCacheHandle;
-
 	VkBuffer m_PackedParticlesBufferHandle;
 	VkDeviceMemory m_PackedParticleBufferMemoryHandle;
 
-	VkPipelineLayout m_GraphicsPipelineLayoutHandle;
+	std::unique_ptr<VulkanPipelineLayout>  m_GraphicsPipelineLayout;
 	VkPipeline m_GraphicePipelineHandle;
 
 	VkCommandPool m_GraphicsCommandPoolHandle;
 	std::vector<VkCommandBuffer> m_GraphicsCommandBufferHandles;
 
-	VkSemaphore m_ImageAvailableSemaphoreHandle;
-	VkSemaphore m_RenderFinishedSemaphoreHandle;
+	std::unique_ptr<VulkanSemaphore> m_ImageAvailableSemaphore;
+	std::unique_ptr<VulkanSemaphore> m_RenderFinishedSemaphore;
 
 	VkDescriptorSetLayout m_ComputeDescriptorSetLayoutHandle;
 	VkDescriptorSet m_ComputeDescriptorSetHandle;
-	VkPipelineLayout m_ComputePipelineLayoutHandle;
+	std::unique_ptr<VulkanPipelineLayout > m_ComputePipelineLayout;
 	VkPipeline m_ComputePipelineHandles[3];
 
 	VkCommandPool m_ComputeCommandPoolHandle;

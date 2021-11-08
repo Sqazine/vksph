@@ -54,26 +54,33 @@ void App::Init()
 	m_RenderPass = std::make_unique<VulkanRenderPass>(m_Device.get(), m_SwapChain.get());
 
 	for (size_t i = 0; i < m_SwapChain->GetVKSwapChainImageViews().size(); ++i)
-		{
-			std::vector<VkImageView> views={m_SwapChain->GetVKSwapChainImageViews()[i]};
-			m_SwapChainFrameBuffers.emplace_back(std::make_unique<VulkanFramebuffer>(m_Device->GetLogicalDeviceHandle(),
+	{
+		std::vector<VkImageView> views = {m_SwapChain->GetVKSwapChainImageViews()[i]};
+		m_SwapChainFrameBuffers.emplace_back(std::make_unique<VulkanFramebuffer>(m_Device->GetLogicalDeviceHandle(),
 																				 m_RenderPass->GetVKRenderPassHandle(),
 																				 views,
 																				 m_SwapChain->GetVKSwapChainExtent().width,
 																				 m_SwapChain->GetVKSwapChainExtent().height));
-		}
+	}
 
-	m_GlobalDescriptorPool=std::make_unique<VulkanDescriptorPool>(m_Device->GetLogicalDeviceHandle(),5);
+	m_GlobalDescriptorPool = std::make_unique<VulkanDescriptorPool>(m_Device->GetLogicalDeviceHandle(), 5);
 
-	m_GlobalPipelineCache=std::make_unique<VulkanPipelineCache>(m_Device->GetLogicalDeviceHandle());
+	m_GlobalPipelineCache = std::make_unique<VulkanPipelineCache>(m_Device->GetLogicalDeviceHandle());
 
-	CreateGraphicsPipelineLayout();
+	m_GraphicsPipelineLayout=std::make_unique<VulkanPipelineLayout>(m_Device->GetLogicalDeviceHandle());
+
 	CreateGraphicsPipeline();
 	CreateGraphicsCommandPool();
 	CreateGraphicsCommandBuffers();
-	CreateSemaphores();
+
+	m_ImageAvailableSemaphore = std::make_unique<VulkanSemaphore>(m_Device->GetLogicalDeviceHandle());
+	m_RenderFinishedSemaphore = std::make_unique<VulkanSemaphore>(m_Device->GetLogicalDeviceHandle());
+
 	CreateComputeDescriptorSetLayout();
-	CreateComputePipelineLayout();
+	
+	std::vector<VkDescriptorSetLayout> compDescSetLayouts={m_ComputeDescriptorSetLayoutHandle};
+	m_ComputePipelineLayout=std::make_unique<VulkanPipelineLayout>(m_Device->GetLogicalDeviceHandle(),compDescSetLayouts);
+
 	CreateComputePipelines();
 	CreateComputeCommandPool();
 	CreateComputeCommandBuffer();
@@ -183,7 +190,7 @@ void App::Simulate()
 
 	VK_CHECK(vkBeginCommandBuffer(m_ComputeCommandBufferHandle, &beginInfo));
 
-	vkCmdBindDescriptorSets(m_ComputeCommandBufferHandle, VK_PIPELINE_BIND_POINT_COMPUTE, m_ComputePipelineLayoutHandle, 0, 1, &m_ComputeDescriptorSetHandle, 0, nullptr);
+	vkCmdBindDescriptorSets(m_ComputeCommandBufferHandle, VK_PIPELINE_BIND_POINT_COMPUTE, m_ComputePipelineLayout->GetVKPipelineLayoutHandle(), 0, 1, &m_ComputeDescriptorSetHandle, 0, nullptr);
 
 	vkCmdBindPipeline(m_ComputeCommandBufferHandle, VK_PIPELINE_BIND_POINT_COMPUTE, m_ComputePipelineHandles[0]);
 	vkCmdDispatch(m_ComputeCommandBufferHandle, WORK_GROUP_NUM, 1, 1);
@@ -251,18 +258,18 @@ void App::Draw()
 
 void App::SubmitAndPresent()
 {
-	vkAcquireNextImageKHR(m_Device->GetLogicalDeviceHandle(), m_SwapChain->GetVKSwapChainHandle(), UINT64_MAX, m_ImageAvailableSemaphoreHandle, VK_NULL_HANDLE, &m_SwapChainImageIndex);
+	vkAcquireNextImageKHR(m_Device->GetLogicalDeviceHandle(), m_SwapChain->GetVKSwapChainHandle(), UINT64_MAX, m_ImageAvailableSemaphore->GetVKSemaphoreHandle(), VK_NULL_HANDLE, &m_SwapChainImageIndex);
 
 	VkSubmitInfo graphicsSubmitInfo{};
 	graphicsSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 	graphicsSubmitInfo.pNext = nullptr;
 	graphicsSubmitInfo.waitSemaphoreCount = 1;
-	graphicsSubmitInfo.pWaitSemaphores = &m_ImageAvailableSemaphoreHandle;
+	graphicsSubmitInfo.pWaitSemaphores = &m_ImageAvailableSemaphore->GetVKSemaphoreHandle();
 	graphicsSubmitInfo.pWaitDstStageMask = &waitDstStageMask;
 	graphicsSubmitInfo.commandBufferCount = 1;
 	graphicsSubmitInfo.pCommandBuffers = m_GraphicsCommandBufferHandles.data() + m_SwapChainImageIndex;
 	graphicsSubmitInfo.signalSemaphoreCount = 1;
-	graphicsSubmitInfo.pSignalSemaphores = &m_RenderFinishedSemaphoreHandle;
+	graphicsSubmitInfo.pSignalSemaphores = &m_RenderFinishedSemaphore->GetVKSemaphoreHandle();
 
 	VK_CHECK(m_Device->GetGraphicsQueue()->Submit(1, &graphicsSubmitInfo, VK_NULL_HANDLE));
 
@@ -270,7 +277,7 @@ void App::SubmitAndPresent()
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 	presentInfo.pNext = nullptr;
 	presentInfo.waitSemaphoreCount = 1;
-	presentInfo.pWaitSemaphores = &m_RenderFinishedSemaphoreHandle;
+	presentInfo.pWaitSemaphores = &m_RenderFinishedSemaphore->GetVKSemaphoreHandle();
 	presentInfo.swapchainCount = 1;
 	presentInfo.pSwapchains = &m_SwapChain->GetVKSwapChainHandle();
 	presentInfo.pImageIndices = &m_SwapChainImageIndex;
@@ -347,23 +354,6 @@ void App::CreatePackedParticleBuffer()
 							vkDestroyBuffer(m_Device->GetLogicalDeviceHandle(), m_PackedParticlesBufferHandle, nullptr);
 							vkFreeMemory(m_Device->GetLogicalDeviceHandle(), m_PackedParticleBufferMemoryHandle, nullptr);
 						});
-}
-
-void App::CreateGraphicsPipelineLayout()
-{
-	VkPipelineLayoutCreateInfo info = {};
-	info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	info.pNext = nullptr;
-	info.flags = 0;
-	info.setLayoutCount = 0;
-	info.pSetLayouts = nullptr;
-	info.pushConstantRangeCount = 0;
-	info.pPushConstantRanges = nullptr;
-
-	VK_CHECK(vkCreatePipelineLayout(m_Device->GetLogicalDeviceHandle(), &info, nullptr, &m_GraphicsPipelineLayoutHandle));
-
-	m_DeletionQueue.Add([=]()
-						{ vkDestroyPipelineLayout(m_Device->GetLogicalDeviceHandle(), m_GraphicsPipelineLayoutHandle, nullptr); });
 }
 
 void App::CreateGraphicsPipeline()
@@ -505,13 +495,13 @@ void App::CreateGraphicsPipeline()
 	graphicsPipelineCreateInfo.pDepthStencilState = nullptr;
 	graphicsPipelineCreateInfo.pColorBlendState = &colorBlendStateInfo;
 	graphicsPipelineCreateInfo.pDynamicState = nullptr;
-	graphicsPipelineCreateInfo.layout = m_GraphicsPipelineLayoutHandle;
+	graphicsPipelineCreateInfo.layout = m_GraphicsPipelineLayout->GetVKPipelineLayoutHandle();
 	graphicsPipelineCreateInfo.renderPass = m_RenderPass->GetVKRenderPassHandle();
 	graphicsPipelineCreateInfo.subpass = 0;
 	graphicsPipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
 	graphicsPipelineCreateInfo.basePipelineIndex = -1;
 
-	VK_CHECK(vkCreateGraphicsPipelines(m_Device->GetLogicalDeviceHandle(), m_GlobalPipelineCacheHandle, 1, &graphicsPipelineCreateInfo, nullptr, &m_GraphicePipelineHandle));
+	VK_CHECK(vkCreateGraphicsPipelines(m_Device->GetLogicalDeviceHandle(), m_GlobalPipelineCache->GetVKPipelineCacheHandle(), 1, &graphicsPipelineCreateInfo, nullptr, &m_GraphicePipelineHandle));
 
 	vkDestroyShaderModule(m_Device->GetLogicalDeviceHandle(), vertShaderModule, nullptr);
 	vkDestroyShaderModule(m_Device->GetLogicalDeviceHandle(), fragShaderModule, nullptr);
@@ -548,23 +538,6 @@ void App::CreateGraphicsCommandBuffers()
 
 	m_DeletionQueue.Add([=]()
 						{ vkFreeCommandBuffers(m_Device->GetLogicalDeviceHandle(), m_GraphicsCommandPoolHandle, m_GraphicsCommandBufferHandles.size(), m_GraphicsCommandBufferHandles.data()); });
-}
-
-void App::CreateSemaphores()
-{
-	VkSemaphoreCreateInfo info = {};
-	info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-	info.pNext = nullptr;
-	info.flags = 0;
-
-	VK_CHECK(vkCreateSemaphore(m_Device->GetLogicalDeviceHandle(), &info, nullptr, &m_ImageAvailableSemaphoreHandle));
-	VK_CHECK(vkCreateSemaphore(m_Device->GetLogicalDeviceHandle(), &info, nullptr, &m_RenderFinishedSemaphoreHandle));
-
-	m_DeletionQueue.Add([=]()
-						{
-							vkDestroySemaphore(m_Device->GetLogicalDeviceHandle(), m_RenderFinishedSemaphoreHandle, nullptr);
-							vkDestroySemaphore(m_Device->GetLogicalDeviceHandle(), m_ImageAvailableSemaphoreHandle, nullptr);
-						});
 }
 
 void App::CreateComputeDescriptorSetLayout()
@@ -705,23 +678,6 @@ void App::UpdateComputeDescriptorSets()
 	vkUpdateDescriptorSets(m_Device->GetLogicalDeviceHandle(), 5, writeDescriptorSets, 0, nullptr);
 }
 
-void App::CreateComputePipelineLayout()
-{
-	VkPipelineLayoutCreateInfo info;
-	info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	info.pNext = nullptr;
-	info.flags = 0;
-	info.setLayoutCount = 1;
-	info.pSetLayouts = &m_ComputeDescriptorSetLayoutHandle;
-	info.pushConstantRangeCount = 0;
-	info.pPushConstantRanges = nullptr;
-
-	VK_CHECK(vkCreatePipelineLayout(m_Device->GetLogicalDeviceHandle(), &info, nullptr, &m_ComputePipelineLayoutHandle));
-
-	m_DeletionQueue.Add([=]()
-						{ vkDestroyPipelineLayout(m_Device->GetLogicalDeviceHandle(), m_ComputePipelineLayoutHandle, nullptr); });
-}
-
 void App::CreateComputePipelines()
 {
 	VkShaderModule computeDensityPressureShaderModule = CreateShaderModuleFromSpirvFile(m_Device->GetLogicalDeviceHandle(), "density_pressure.comp.spv");
@@ -740,23 +696,23 @@ void App::CreateComputePipelines()
 	pipelineInfo.pNext = nullptr;
 	pipelineInfo.flags = 0;
 	pipelineInfo.stage = computeShaderStageCreateInfo;
-	pipelineInfo.layout = m_ComputePipelineLayoutHandle;
+	pipelineInfo.layout = m_ComputePipelineLayout->GetVKPipelineLayoutHandle();
 	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 	pipelineInfo.basePipelineIndex = -1;
 
-	VK_CHECK(vkCreateComputePipelines(m_Device->GetLogicalDeviceHandle(), m_GlobalPipelineCacheHandle, 1, &pipelineInfo, nullptr, &m_ComputePipelineHandles[0]));
+	VK_CHECK(vkCreateComputePipelines(m_Device->GetLogicalDeviceHandle(), m_GlobalPipelineCache->GetVKPipelineCacheHandle(), 1, &pipelineInfo, nullptr, &m_ComputePipelineHandles[0]));
 
 	VkShaderModule computeForceShaderModule = CreateShaderModuleFromSpirvFile(m_Device->GetLogicalDeviceHandle(), "force.comp.spv");
 
 	computeShaderStageCreateInfo.module = computeForceShaderModule;
 	pipelineInfo.stage = computeShaderStageCreateInfo;
 
-	VK_CHECK(vkCreateComputePipelines(m_Device->GetLogicalDeviceHandle(), m_GlobalPipelineCacheHandle, 1, &pipelineInfo, nullptr, &m_ComputePipelineHandles[1]));
+	VK_CHECK(vkCreateComputePipelines(m_Device->GetLogicalDeviceHandle(), m_GlobalPipelineCache->GetVKPipelineCacheHandle(), 1, &pipelineInfo, nullptr, &m_ComputePipelineHandles[1]));
 
 	VkShaderModule computeIntegrateShaderModule = CreateShaderModuleFromSpirvFile(m_Device->GetLogicalDeviceHandle(), "integrate.comp.spv");
 	computeShaderStageCreateInfo.module = computeIntegrateShaderModule;
 	pipelineInfo.stage = computeShaderStageCreateInfo;
-	VK_CHECK(vkCreateComputePipelines(m_Device->GetLogicalDeviceHandle(), m_GlobalPipelineCacheHandle, 1, &pipelineInfo, nullptr, &m_ComputePipelineHandles[2]));
+	VK_CHECK(vkCreateComputePipelines(m_Device->GetLogicalDeviceHandle(), m_GlobalPipelineCache->GetVKPipelineCacheHandle(), 1, &pipelineInfo, nullptr, &m_ComputePipelineHandles[2]));
 
 	vkDestroyShaderModule(m_Device->GetLogicalDeviceHandle(), computeIntegrateShaderModule, nullptr);
 	vkDestroyShaderModule(m_Device->GetLogicalDeviceHandle(), computeForceShaderModule, nullptr);
