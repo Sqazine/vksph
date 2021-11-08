@@ -65,7 +65,8 @@ void App::Init()
 
 	m_GlobalDescriptorPool=std::make_unique<VulkanDescriptorPool>(m_Device->GetLogicalDeviceHandle(),5);
 
-	CreatePipelineCache();
+	m_GlobalPipelineCache=std::make_unique<VulkanPipelineCache>(m_Device->GetLogicalDeviceHandle());
+
 	CreateGraphicsPipelineLayout();
 	CreateGraphicsPipeline();
 	CreateGraphicsCommandPool();
@@ -315,22 +316,6 @@ void App::LoadVulkanLib()
 
 	m_DeletionQueue.Add([=]()
 						{ SDL_Vulkan_UnloadLibrary(); });
-}
-
-
-void App::CreatePipelineCache()
-{
-	VkPipelineCacheCreateInfo info{};
-	info.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
-	info.pNext = nullptr;
-	info.flags = 0;
-	info.initialDataSize = 0;
-	info.pInitialData = nullptr;
-
-	VK_CHECK(vkCreatePipelineCache(m_Device->GetLogicalDeviceHandle(), &info, nullptr, &m_GlobalPipelineCacheHandle));
-
-	m_DeletionQueue.Add([=]()
-						{ vkDestroyPipelineCache(m_Device->GetLogicalDeviceHandle(), m_GlobalPipelineCacheHandle, nullptr); });
 }
 
 void App::CreatePackedParticleBuffer()

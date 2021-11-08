@@ -17,6 +17,7 @@
 #include "VulkanRenderPass.h"
 #include "VulkanFramebuffer.h"
 #include "VulkanDescriptorPool.h"
+#include "VulkanPipelineCache.h"
 
 #define PARTICLE_NUM 20000
 #define PARTICLE_RADIUS 0.005f
@@ -64,7 +65,6 @@ private:
 
 	void CreateWindow(std::string title, int32_t width, int32_t height);
 	void LoadVulkanLib();
-	void CreatePipelineCache();
 	void CreateGraphicsPipelineLayout();
 	void CreateGraphicsPipeline();
 	void CreateGraphicsCommandPool();
@@ -92,6 +92,7 @@ private:
 	std::unique_ptr<VulkanRenderPass> m_RenderPass;
 	std::vector<std::unique_ptr<VulkanFramebuffer>> m_SwapChainFrameBuffers;
 	std::unique_ptr<VulkanDescriptorPool> m_GlobalDescriptorPool;
+	std::unique_ptr<VulkanPipelineCache> m_GlobalPipelineCache;
 
 	VkPipelineCache m_GlobalPipelineCacheHandle;
 
