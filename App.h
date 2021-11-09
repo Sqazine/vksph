@@ -20,6 +20,7 @@
 #include "VulkanPipelineCache.h"
 #include "VulkanSemaphore.h"
 #include "VulkanPipelineLayout.h"
+#include "VulkanCommandPool.h"
 
 #define PARTICLE_NUM 20000
 #define PARTICLE_RADIUS 0.005f
@@ -31,24 +32,6 @@ const std::vector<const char *> validationLayers = {
 
 const std::vector<const char *> deviceExtensions = {
 	VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-
-struct DeletionQueue
-{
-	std::deque<std::function<void()>> deletors;
-
-	void Add(std::function<void()> &&function)
-	{
-		deletors.emplace_back(function);
-	}
-
-	void Flush()
-	{
-		for (auto it = deletors.rbegin(); it != deletors.rend(); ++it)
-			(*it)();
-
-		deletors.clear();
-	}
-};
 
 class App
 {
@@ -69,12 +52,8 @@ private:
 	void LoadVulkanLib();
 	void CreateGraphicsPipelineLayout();
 	void CreateGraphicsPipeline();
-	void CreateGraphicsCommandPool();
-	void CreateGraphicsCommandBuffers();
 	void CreateComputeDescriptorSetLayout();
 	void CreateComputePipelines();
-	void CreateComputeCommandPool();
-	void CreateComputeCommandBuffer();
 
 	void InitParticleData(std::array<glm::vec2, PARTICLE_NUM> initParticlePosition);
 	void CreatePackedParticleBuffer();
@@ -100,7 +79,7 @@ private:
 	std::unique_ptr<VulkanPipelineLayout>  m_GraphicsPipelineLayout;
 	VkPipeline m_GraphicePipelineHandle;
 
-	VkCommandPool m_GraphicsCommandPoolHandle;
+	std::unique_ptr<VulkanCommandPool> m_GraphicsCommandPool;
 	std::vector<VkCommandBuffer> m_GraphicsCommandBufferHandles;
 
 	std::unique_ptr<VulkanSemaphore> m_ImageAvailableSemaphore;
@@ -111,7 +90,7 @@ private:
 	std::unique_ptr<VulkanPipelineLayout > m_ComputePipelineLayout;
 	VkPipeline m_ComputePipelineHandles[3];
 
-	VkCommandPool m_ComputeCommandPoolHandle;
+	std::unique_ptr<VulkanCommandPool> m_ComputeCommandPool;
 	VkCommandBuffer m_ComputeCommandBufferHandle;
 
 	VkPipelineStageFlags waitDstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;

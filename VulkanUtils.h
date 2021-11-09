@@ -6,6 +6,8 @@
 #include <SDL2/SDL_vulkan.h>
 #include <string_view>
 #include <array>
+#include <deque>
+#include <functional>
 #define VK_CHECK(x)                                                     \
 	do                                                                  \
 	{                                                                   \
@@ -16,6 +18,24 @@
 			abort();                                                    \
 		}                                                               \
 	} while (0);
+
+struct DeletionQueue
+{
+	std::deque<std::function<void()>> deletors;
+
+	void Add(std::function<void()> &&function)
+	{
+		deletors.emplace_back(function);
+	}
+
+	void Flush()
+	{
+		for (auto it = deletors.rbegin(); it != deletors.rend(); ++it)
+			(*it)();
+
+		deletors.clear();
+	}
+};
 
 struct QueueFamilyIndices
 {

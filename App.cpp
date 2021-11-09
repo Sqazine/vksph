@@ -70,8 +70,9 @@ void App::Init()
 	m_GraphicsPipelineLayout=std::make_unique<VulkanPipelineLayout>(m_Device->GetLogicalDeviceHandle());
 
 	CreateGraphicsPipeline();
-	CreateGraphicsCommandPool();
-	CreateGraphicsCommandBuffers();
+
+	m_GraphicsCommandPool=std::make_unique<VulkanCommandPool>(m_Device->GetLogicalDeviceHandle(),m_Device->GetQueueIndices().graphicsFamily.value());
+	m_GraphicsCommandBufferHandles=m_GraphicsCommandPool->AllocateCommandBuffers(m_SwapChainFrameBuffers.size(),VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
 	m_ImageAvailableSemaphore = std::make_unique<VulkanSemaphore>(m_Device->GetLogicalDeviceHandle());
 	m_RenderFinishedSemaphore = std::make_unique<VulkanSemaphore>(m_Device->GetLogicalDeviceHandle());
@@ -82,8 +83,9 @@ void App::Init()
 	m_ComputePipelineLayout=std::make_unique<VulkanPipelineLayout>(m_Device->GetLogicalDeviceHandle(),compDescSetLayouts);
 
 	CreateComputePipelines();
-	CreateComputeCommandPool();
-	CreateComputeCommandBuffer();
+
+	m_ComputeCommandPool=std::make_unique<VulkanCommandPool>(m_Device->GetLogicalDeviceHandle(),m_Device->GetQueueIndices().computeFamily.value());
+	m_ComputeCommandBufferHandle=m_ComputeCommandPool->AllocateCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
 	std::array<glm::vec2, PARTICLE_NUM> initParticlePosition;
 	for (auto i = 0, x = 0, y = 0; i < PARTICLE_NUM; ++i)
@@ -510,36 +512,6 @@ void App::CreateGraphicsPipeline()
 						{ vkDestroyPipeline(m_Device->GetLogicalDeviceHandle(), m_GraphicePipelineHandle, nullptr); });
 }
 
-void App::CreateGraphicsCommandPool()
-{
-	VkCommandPoolCreateInfo info;
-	info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-	info.pNext = nullptr;
-	info.flags = 0;
-	info.queueFamilyIndex = m_Device->GetQueueIndices().graphicsFamily.value();
-
-	VK_CHECK(vkCreateCommandPool(m_Device->GetLogicalDeviceHandle(), &info, nullptr, &m_GraphicsCommandPoolHandle));
-
-	m_DeletionQueue.Add([=]()
-						{ vkDestroyCommandPool(m_Device->GetLogicalDeviceHandle(), m_GraphicsCommandPoolHandle, nullptr); });
-}
-
-void App::CreateGraphicsCommandBuffers()
-{
-	m_GraphicsCommandBufferHandles.resize(m_SwapChainFrameBuffers.size());
-	VkCommandBufferAllocateInfo bufferAllocInfo = {};
-	bufferAllocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-	bufferAllocInfo.pNext = nullptr;
-	bufferAllocInfo.commandBufferCount = (uint32_t)m_GraphicsCommandBufferHandles.size();
-	bufferAllocInfo.commandPool = m_GraphicsCommandPoolHandle;
-	bufferAllocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-
-	VK_CHECK(vkAllocateCommandBuffers(m_Device->GetLogicalDeviceHandle(), &bufferAllocInfo, m_GraphicsCommandBufferHandles.data()));
-
-	m_DeletionQueue.Add([=]()
-						{ vkFreeCommandBuffers(m_Device->GetLogicalDeviceHandle(), m_GraphicsCommandPoolHandle, m_GraphicsCommandBufferHandles.size(), m_GraphicsCommandBufferHandles.data()); });
-}
-
 void App::CreateComputeDescriptorSetLayout()
 {
 	VkDescriptorSetLayoutBinding descriptorSetLayoutBindings[5];
@@ -725,35 +697,6 @@ void App::CreateComputePipelines()
 						});
 }
 
-void App::CreateComputeCommandPool()
-{
-	VkCommandPoolCreateInfo info{};
-	info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-	info.pNext = nullptr;
-	info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-	info.queueFamilyIndex = m_Device->GetQueueIndices().computeFamily.value();
-
-	VK_CHECK(vkCreateCommandPool(m_Device->GetLogicalDeviceHandle(), &info, nullptr, &m_ComputeCommandPoolHandle));
-
-	m_DeletionQueue.Add([=]()
-						{ vkDestroyCommandPool(m_Device->GetLogicalDeviceHandle(), m_ComputeCommandPoolHandle, nullptr); });
-}
-
-void App::CreateComputeCommandBuffer()
-{
-	VkCommandBufferAllocateInfo allocInfo{};
-	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-	allocInfo.pNext = nullptr;
-	allocInfo.commandPool = m_ComputeCommandPoolHandle;
-	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	allocInfo.commandBufferCount = 1;
-
-	VK_CHECK(vkAllocateCommandBuffers(m_Device->GetLogicalDeviceHandle(), &allocInfo, &m_ComputeCommandBufferHandle));
-
-	m_DeletionQueue.Add([=]()
-						{ vkFreeCommandBuffers(m_Device->GetLogicalDeviceHandle(), m_ComputeCommandPoolHandle, 1, &m_ComputeCommandBufferHandle); });
-}
-
 void App::InitParticleData(std::array<glm::vec2, PARTICLE_NUM> initParticlePosition)
 {
 	VkBuffer stagingBufferHandle = VK_NULL_HANDLE;
@@ -798,7 +741,7 @@ void App::InitParticleData(std::array<glm::vec2, PARTICLE_NUM> initParticlePosit
 	VkCommandBufferAllocateInfo copyCommandBufferAllocInfo;
 	copyCommandBufferAllocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 	copyCommandBufferAllocInfo.pNext = nullptr;
-	copyCommandBufferAllocInfo.commandPool = m_ComputeCommandPoolHandle;
+	copyCommandBufferAllocInfo.commandPool = m_ComputeCommandPool->GetVKCommandPoolHandle();
 	copyCommandBufferAllocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 	copyCommandBufferAllocInfo.commandBufferCount = 1;
 
@@ -835,7 +778,7 @@ void App::InitParticleData(std::array<glm::vec2, PARTICLE_NUM> initParticlePosit
 	VK_CHECK(m_Device->GetComputeQueue()->Submit(1, &copySubmitInfo, VK_NULL_HANDLE));
 	VK_CHECK(m_Device->GetComputeQueue()->WaitIdle());
 
-	vkFreeCommandBuffers(m_Device->GetLogicalDeviceHandle(), m_ComputeCommandPoolHandle, 1, &copyCommandBufferHandle);
+	vkFreeCommandBuffers(m_Device->GetLogicalDeviceHandle(), m_ComputeCommandPool->GetVKCommandPoolHandle(), 1, &copyCommandBufferHandle);
 	vkFreeMemory(m_Device->GetLogicalDeviceHandle(), stagingBufferDeviceMemoryHandle, nullptr);
 	vkDestroyBuffer(m_Device->GetLogicalDeviceHandle(), stagingBufferHandle, nullptr);
 }
