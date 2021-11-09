@@ -50,7 +50,8 @@ private:
 
 	void CreateWindow(std::string title, int32_t width, int32_t height);
 	void LoadVulkanLib();
-	void CreateGraphicsPipelineLayout();
+
+
 	void CreateGraphicsPipeline();
 	void CreateComputeDescriptorSetLayout();
 	void CreateComputePipelines();

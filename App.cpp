@@ -1,6 +1,6 @@
 #include "App.h"
 #include <iostream>
-
+#include "VulkanShader.h"
 App::App(std::string title, int32_t width, int32_t height)
 	: m_IsRunning(true), m_WindowWidth(width), m_WindowHeight(height), m_WindowTitle(title)
 {
@@ -360,30 +360,13 @@ void App::CreatePackedParticleBuffer()
 
 void App::CreateGraphicsPipeline()
 {
-	VkShaderModule vertShaderModule = CreateShaderModuleFromSpirvFile(m_Device->GetLogicalDeviceHandle(), "particle.vert.spv");
-	VkShaderModule fragShaderModule = CreateShaderModuleFromSpirvFile(m_Device->GetLogicalDeviceHandle(), "particle.frag.spv");
 
-	VkPipelineShaderStageCreateInfo vertStageInfo = {};
-	vertStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	vertStageInfo.pNext = nullptr;
-	vertStageInfo.flags = 0;
-	vertStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-	vertStageInfo.module = vertShaderModule;
-	vertStageInfo.pName = "main";
-	vertStageInfo.pSpecializationInfo = nullptr;
-
-	VkPipelineShaderStageCreateInfo fragStageInfo = {};
-	fragStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	fragStageInfo.pNext = nullptr;
-	fragStageInfo.flags = 0;
-	fragStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-	fragStageInfo.module = fragShaderModule;
-	fragStageInfo.pName = "main";
-	fragStageInfo.pSpecializationInfo = nullptr;
+	std::unique_ptr<VulkanShader> vertShader=std::make_unique<VulkanShader>(m_Device->GetLogicalDeviceHandle(),VK_SHADER_STAGE_VERTEX_BIT,"particle.vert.spv");
+	std::unique_ptr<VulkanShader> fragShader=std::make_unique<VulkanShader>(m_Device->GetLogicalDeviceHandle(),VK_SHADER_STAGE_FRAGMENT_BIT,"particle.frag.spv");
 
 	std::vector<VkPipelineShaderStageCreateInfo> shaderStageCreateInfos;
-	shaderStageCreateInfos.emplace_back(vertStageInfo);
-	shaderStageCreateInfos.emplace_back(fragStageInfo);
+	shaderStageCreateInfos.emplace_back(vertShader->GetStageCreateInfo());
+	shaderStageCreateInfos.emplace_back(fragShader->GetStageCreateInfo());
 
 	VkVertexInputBindingDescription vertexInputBIndingDesc = {};
 	vertexInputBIndingDesc.binding = 0;
@@ -504,9 +487,6 @@ void App::CreateGraphicsPipeline()
 	graphicsPipelineCreateInfo.basePipelineIndex = -1;
 
 	VK_CHECK(vkCreateGraphicsPipelines(m_Device->GetLogicalDeviceHandle(), m_GlobalPipelineCache->GetVKPipelineCacheHandle(), 1, &graphicsPipelineCreateInfo, nullptr, &m_GraphicePipelineHandle));
-
-	vkDestroyShaderModule(m_Device->GetLogicalDeviceHandle(), vertShaderModule, nullptr);
-	vkDestroyShaderModule(m_Device->GetLogicalDeviceHandle(), fragShaderModule, nullptr);
 
 	m_DeletionQueue.Add([=]()
 						{ vkDestroyPipeline(m_Device->GetLogicalDeviceHandle(), m_GraphicePipelineHandle, nullptr); });
