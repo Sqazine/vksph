@@ -67,25 +67,64 @@ void App::Init()
 
 	m_GlobalPipelineCache = std::make_unique<VulkanPipelineCache>(m_Device->GetLogicalDeviceHandle());
 
-	m_GraphicsPipelineLayout=std::make_unique<VulkanPipelineLayout>(m_Device->GetLogicalDeviceHandle());
+	m_GraphicsPipelineLayout = std::make_unique<VulkanPipelineLayout>(m_Device->GetLogicalDeviceHandle());
 
 	CreateGraphicsPipeline();
 
-	m_GraphicsCommandPool=std::make_unique<VulkanCommandPool>(m_Device->GetLogicalDeviceHandle(),m_Device->GetQueueIndices().graphicsFamily.value());
-	m_GraphicsCommandBufferHandles=m_GraphicsCommandPool->AllocateCommandBuffers(m_SwapChainFrameBuffers.size(),VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+	m_GraphicsCommandPool = std::make_unique<VulkanCommandPool>(m_Device->GetLogicalDeviceHandle(), m_Device->GetQueueIndices().graphicsFamily.value());
+	m_GraphicsCommandBufferHandles = m_GraphicsCommandPool->AllocateCommandBuffers(m_SwapChainFrameBuffers.size(), VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
 	m_ImageAvailableSemaphore = std::make_unique<VulkanSemaphore>(m_Device->GetLogicalDeviceHandle());
 	m_RenderFinishedSemaphore = std::make_unique<VulkanSemaphore>(m_Device->GetLogicalDeviceHandle());
 
-	CreateComputeDescriptorSetLayout();
-	
-	std::vector<VkDescriptorSetLayout> compDescSetLayouts={m_ComputeDescriptorSetLayoutHandle};
-	m_ComputePipelineLayout=std::make_unique<VulkanPipelineLayout>(m_Device->GetLogicalDeviceHandle(),compDescSetLayouts);
+	std::vector<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings;
+
+	VkDescriptorSetLayoutBinding descriptorSetLayoutBinding;
+
+	descriptorSetLayoutBinding.binding = 0;
+	descriptorSetLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	descriptorSetLayoutBinding.descriptorCount = 1;
+	descriptorSetLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+	descriptorSetLayoutBinding.pImmutableSamplers = nullptr;
+	descriptorSetLayoutBindings.emplace_back(descriptorSetLayoutBinding);
+
+	descriptorSetLayoutBinding.binding = 1;
+	descriptorSetLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	descriptorSetLayoutBinding.descriptorCount = 1;
+	descriptorSetLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+	descriptorSetLayoutBinding.pImmutableSamplers = nullptr;
+	descriptorSetLayoutBindings.emplace_back(descriptorSetLayoutBinding);
+
+	descriptorSetLayoutBinding.binding = 2;
+	descriptorSetLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	descriptorSetLayoutBinding.descriptorCount = 1;
+	descriptorSetLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+	descriptorSetLayoutBinding.pImmutableSamplers = nullptr;
+	descriptorSetLayoutBindings.emplace_back(descriptorSetLayoutBinding);
+
+	descriptorSetLayoutBinding.binding = 3;
+	descriptorSetLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	descriptorSetLayoutBinding.descriptorCount = 1;
+	descriptorSetLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+	descriptorSetLayoutBinding.pImmutableSamplers = nullptr;
+	descriptorSetLayoutBindings.emplace_back(descriptorSetLayoutBinding);
+
+	descriptorSetLayoutBinding.binding = 4;
+	descriptorSetLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	descriptorSetLayoutBinding.descriptorCount = 1;
+	descriptorSetLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+	descriptorSetLayoutBinding.pImmutableSamplers = nullptr;
+	descriptorSetLayoutBindings.emplace_back(descriptorSetLayoutBinding);
+
+	m_ComputeDescriptorSetLayout = std::make_unique<VulkanDescriptorSetLayout>(m_Device->GetLogicalDeviceHandle(), descriptorSetLayoutBindings);
+
+	std::vector<VkDescriptorSetLayout> compDescSetLayouts = {m_ComputeDescriptorSetLayout->GetVKDescriptorSetLayoutHandle()};
+	m_ComputePipelineLayout = std::make_unique<VulkanPipelineLayout>(m_Device->GetLogicalDeviceHandle(), compDescSetLayouts);
 
 	CreateComputePipelines();
 
-	m_ComputeCommandPool=std::make_unique<VulkanCommandPool>(m_Device->GetLogicalDeviceHandle(),m_Device->GetQueueIndices().computeFamily.value());
-	m_ComputeCommandBufferHandle=m_ComputeCommandPool->AllocateCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+	m_ComputeCommandPool = std::make_unique<VulkanCommandPool>(m_Device->GetLogicalDeviceHandle(), m_Device->GetQueueIndices().computeFamily.value());
+	m_ComputeCommandBufferHandle = m_ComputeCommandPool->AllocateCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
 	std::array<glm::vec2, PARTICLE_NUM> initParticlePosition;
 	for (auto i = 0, x = 0, y = 0; i < PARTICLE_NUM; ++i)
@@ -361,8 +400,8 @@ void App::CreatePackedParticleBuffer()
 void App::CreateGraphicsPipeline()
 {
 
-	std::unique_ptr<VulkanShader> vertShader=std::make_unique<VulkanShader>(m_Device->GetLogicalDeviceHandle(),VK_SHADER_STAGE_VERTEX_BIT,"particle.vert.spv");
-	std::unique_ptr<VulkanShader> fragShader=std::make_unique<VulkanShader>(m_Device->GetLogicalDeviceHandle(),VK_SHADER_STAGE_FRAGMENT_BIT,"particle.frag.spv");
+	std::unique_ptr<VulkanShader> vertShader = std::make_unique<VulkanShader>(m_Device->GetLogicalDeviceHandle(), VK_SHADER_STAGE_VERTEX_BIT, "particle.vert.spv");
+	std::unique_ptr<VulkanShader> fragShader = std::make_unique<VulkanShader>(m_Device->GetLogicalDeviceHandle(), VK_SHADER_STAGE_FRAGMENT_BIT, "particle.frag.spv");
 
 	std::vector<VkPipelineShaderStageCreateInfo> shaderStageCreateInfos;
 	shaderStageCreateInfos.emplace_back(vertShader->GetStageCreateInfo());
@@ -492,59 +531,12 @@ void App::CreateGraphicsPipeline()
 						{ vkDestroyPipeline(m_Device->GetLogicalDeviceHandle(), m_GraphicePipelineHandle, nullptr); });
 }
 
-void App::CreateComputeDescriptorSetLayout()
-{
-	VkDescriptorSetLayoutBinding descriptorSetLayoutBindings[5];
-
-	descriptorSetLayoutBindings[0].binding = 0;
-	descriptorSetLayoutBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-	descriptorSetLayoutBindings[0].descriptorCount = 1;
-	descriptorSetLayoutBindings[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-	descriptorSetLayoutBindings[0].pImmutableSamplers = nullptr;
-
-	descriptorSetLayoutBindings[1].binding = 1;
-	descriptorSetLayoutBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-	descriptorSetLayoutBindings[1].descriptorCount = 1;
-	descriptorSetLayoutBindings[1].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-	descriptorSetLayoutBindings[1].pImmutableSamplers = nullptr;
-
-	descriptorSetLayoutBindings[2].binding = 2;
-	descriptorSetLayoutBindings[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-	descriptorSetLayoutBindings[2].descriptorCount = 1;
-	descriptorSetLayoutBindings[2].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-	descriptorSetLayoutBindings[2].pImmutableSamplers = nullptr;
-
-	descriptorSetLayoutBindings[3].binding = 3;
-	descriptorSetLayoutBindings[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-	descriptorSetLayoutBindings[3].descriptorCount = 1;
-	descriptorSetLayoutBindings[3].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-	descriptorSetLayoutBindings[3].pImmutableSamplers = nullptr;
-
-	descriptorSetLayoutBindings[4].binding = 4;
-	descriptorSetLayoutBindings[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-	descriptorSetLayoutBindings[4].descriptorCount = 1;
-	descriptorSetLayoutBindings[4].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-	descriptorSetLayoutBindings[4].pImmutableSamplers = nullptr;
-
-	VkDescriptorSetLayoutCreateInfo descriptorSetLayoutInfo;
-	descriptorSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	descriptorSetLayoutInfo.pNext = nullptr;
-	descriptorSetLayoutInfo.flags = 0;
-	descriptorSetLayoutInfo.bindingCount = 5;
-	descriptorSetLayoutInfo.pBindings = descriptorSetLayoutBindings;
-
-	VK_CHECK(vkCreateDescriptorSetLayout(m_Device->GetLogicalDeviceHandle(), &descriptorSetLayoutInfo, nullptr, &m_ComputeDescriptorSetLayoutHandle));
-
-	m_DeletionQueue.Add([=]()
-						{ vkDestroyDescriptorSetLayout(m_Device->GetLogicalDeviceHandle(), m_ComputeDescriptorSetLayoutHandle, nullptr); });
-}
-
 void App::UpdateComputeDescriptorSets()
 {
 	VkDescriptorSetAllocateInfo descriptorSetAllocInfo = {};
 	descriptorSetAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 	descriptorSetAllocInfo.pNext = nullptr;
-	descriptorSetAllocInfo.pSetLayouts = &m_ComputeDescriptorSetLayoutHandle;
+	descriptorSetAllocInfo.pSetLayouts = &m_ComputeDescriptorSetLayout->GetVKDescriptorSetLayoutHandle();
 	descriptorSetAllocInfo.descriptorPool = m_GlobalDescriptorPool->GetVKDescriptorPoolHandle();
 	descriptorSetAllocInfo.descriptorSetCount = 1;
 

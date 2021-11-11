@@ -21,6 +21,7 @@
 #include "VulkanSemaphore.h"
 #include "VulkanPipelineLayout.h"
 #include "VulkanCommandPool.h"
+#include "VulkanDescriptorSetLayout.h"
 
 #define PARTICLE_NUM 20000
 #define PARTICLE_RADIUS 0.005f
@@ -53,7 +54,6 @@ private:
 
 
 	void CreateGraphicsPipeline();
-	void CreateComputeDescriptorSetLayout();
 	void CreateComputePipelines();
 
 	void InitParticleData(std::array<glm::vec2, PARTICLE_NUM> initParticlePosition);
@@ -86,7 +86,7 @@ private:
 	std::unique_ptr<VulkanSemaphore> m_ImageAvailableSemaphore;
 	std::unique_ptr<VulkanSemaphore> m_RenderFinishedSemaphore;
 
-	VkDescriptorSetLayout m_ComputeDescriptorSetLayoutHandle;
+	std::unique_ptr<VulkanDescriptorSetLayout> m_ComputeDescriptorSetLayout;
 	VkDescriptorSet m_ComputeDescriptorSetHandle;
 	std::unique_ptr<VulkanPipelineLayout > m_ComputePipelineLayout;
 	VkPipeline m_ComputePipelineHandles[3];
