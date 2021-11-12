@@ -22,7 +22,7 @@ public:
 
     QueueFamilyIndices GetQueueIndices() const;
 
-    uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
+    uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const;
 private:
     VkPhysicalDevice SelectPhysicalDevice();
 

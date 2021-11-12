@@ -138,7 +138,13 @@ void App::Init()
 			y++;
 		}
 	}
-	CreatePackedParticleBuffer();
+
+	m_PackedParticlesBuffer = std::make_unique<VulkanBuffer>(m_Device.get(),
+															 m_PackedBufferSize,
+															 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+															 VK_SHARING_MODE_EXCLUSIVE,
+															 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
 	InitParticleData(initParticlePosition);
 	UpdateComputeDescriptorSets();
 }
@@ -289,7 +295,7 @@ void App::Draw()
 		vkCmdBindPipeline(m_GraphicsCommandBufferHandles[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicePipelineHandle);
 
 		VkDeviceSize offsets = 0;
-		vkCmdBindVertexBuffers(m_GraphicsCommandBufferHandles[i], 0, 1, &m_PackedParticlesBufferHandle, &offsets);
+		vkCmdBindVertexBuffers(m_GraphicsCommandBufferHandles[i], 0, 1, &m_PackedParticlesBuffer->GetVKBufferHandle(), &offsets);
 		vkCmdDraw(m_GraphicsCommandBufferHandles[i], PARTICLE_NUM, 1, 0, 0);
 		vkCmdEndRenderPass(m_GraphicsCommandBufferHandles[i]);
 
@@ -364,37 +370,6 @@ void App::LoadVulkanLib()
 
 	m_DeletionQueue.Add([=]()
 						{ SDL_Vulkan_UnloadLibrary(); });
-}
-
-void App::CreatePackedParticleBuffer()
-{
-	VkBufferCreateInfo bufferInfo;
-	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	bufferInfo.pNext = nullptr;
-	bufferInfo.flags = 0;
-	bufferInfo.size = m_PackedBufferSize;
-	bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-	VK_CHECK(vkCreateBuffer(m_Device->GetLogicalDeviceHandle(), &bufferInfo, nullptr, &m_PackedParticlesBufferHandle));
-
-	VkMemoryRequirements memRequirements;
-	vkGetBufferMemoryRequirements(m_Device->GetLogicalDeviceHandle(), m_PackedParticlesBufferHandle, &memRequirements);
-
-	VkMemoryAllocateInfo allocInfo{};
-	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	allocInfo.allocationSize = memRequirements.size;
-	allocInfo.memoryTypeIndex = m_Device->FindMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-	VK_CHECK(vkAllocateMemory(m_Device->GetLogicalDeviceHandle(), &allocInfo, nullptr, &m_PackedParticleBufferMemoryHandle));
-
-	vkBindBufferMemory(m_Device->GetLogicalDeviceHandle(), m_PackedParticlesBufferHandle, m_PackedParticleBufferMemoryHandle, 0);
-
-	m_DeletionQueue.Add([=]()
-						{
-							vkDestroyBuffer(m_Device->GetLogicalDeviceHandle(), m_PackedParticlesBufferHandle, nullptr);
-							vkFreeMemory(m_Device->GetLogicalDeviceHandle(), m_PackedParticleBufferMemoryHandle, nullptr);
-						});
 }
 
 void App::CreateGraphicsPipeline()
@@ -543,23 +518,23 @@ void App::UpdateComputeDescriptorSets()
 	VK_CHECK(vkAllocateDescriptorSets(m_Device->GetLogicalDeviceHandle(), &descriptorSetAllocInfo, &m_ComputeDescriptorSetHandle));
 
 	VkDescriptorBufferInfo descriptorBufferInfos[5];
-	descriptorBufferInfos[0].buffer = m_PackedParticlesBufferHandle;
+	descriptorBufferInfos[0].buffer = m_PackedParticlesBuffer->GetVKBufferHandle();
 	descriptorBufferInfos[0].offset = m_PosSsboOffset;
 	descriptorBufferInfos[0].range = m_PosSsboSize;
 
-	descriptorBufferInfos[1].buffer = m_PackedParticlesBufferHandle;
+	descriptorBufferInfos[1].buffer = m_PackedParticlesBuffer->GetVKBufferHandle();
 	descriptorBufferInfos[1].offset = m_VelocitySsboOffset;
 	descriptorBufferInfos[1].range = m_VelocitySsboSize;
 
-	descriptorBufferInfos[2].buffer = m_PackedParticlesBufferHandle;
+	descriptorBufferInfos[2].buffer = m_PackedParticlesBuffer->GetVKBufferHandle();
 	descriptorBufferInfos[2].offset = m_ForceSsboOffset;
 	descriptorBufferInfos[2].range = m_ForceSsboSize;
 
-	descriptorBufferInfos[3].buffer = m_PackedParticlesBufferHandle;
+	descriptorBufferInfos[3].buffer = m_PackedParticlesBuffer->GetVKBufferHandle();
 	descriptorBufferInfos[3].offset = m_DensitySsboOffset;
 	descriptorBufferInfos[3].range = m_DensitySsboSize;
 
-	descriptorBufferInfos[4].buffer = m_PackedParticlesBufferHandle;
+	descriptorBufferInfos[4].buffer = m_PackedParticlesBuffer->GetVKBufferHandle();
 	descriptorBufferInfos[4].offset = m_PressureSsboOffset;
 	descriptorBufferInfos[4].range = m_PressureSsboSize;
 
@@ -732,7 +707,7 @@ void App::InitParticleData(std::array<glm::vec2, PARTICLE_NUM> initParticlePosit
 	bufferCopyRegion.dstOffset = 0;
 	bufferCopyRegion.size = stagingBufferMemoryRequirements.size;
 
-	vkCmdCopyBuffer(copyCommandBufferHandle, stagingBufferHandle, m_PackedParticlesBufferHandle, 1, &bufferCopyRegion);
+	vkCmdCopyBuffer(copyCommandBufferHandle, stagingBufferHandle, m_PackedParticlesBuffer->GetVKBufferHandle(), 1, &bufferCopyRegion);
 
 	VK_CHECK(vkEndCommandBuffer(copyCommandBufferHandle));
 

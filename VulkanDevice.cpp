@@ -96,7 +96,7 @@ QueueFamilyIndices VulkanDevice::GetQueueIndices() const
     return m_QueueIndices;
 }
 
-uint32_t VulkanDevice::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties)
+uint32_t VulkanDevice::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const
 {
     VkPhysicalDeviceMemoryProperties phyDevMemProps = GetPhysicalDeviceMemoryProps(m_PhysicalDeviceHandle);
 
