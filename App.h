@@ -24,6 +24,7 @@
 #include "VulkanDescriptorSetLayout.h"
 #include "VulkanBuffer.h"
 #include "VulkanComputePipeline.h"
+#include "VulkanGraphicsPipeline.h"
 
 #define PARTICLE_NUM 20000
 #define PARTICLE_RADIUS 0.005f
@@ -54,8 +55,6 @@ private:
 	void CreateWindow(std::string title, int32_t width, int32_t height);
 	void LoadVulkanLib();
 
-	void CreateGraphicsPipeline();
-
 	void InitParticleData(std::array<glm::vec2, PARTICLE_NUM> initParticlePosition);
 
 	void UpdateComputeDescriptorSets();
@@ -77,7 +76,7 @@ private:
 	std::unique_ptr<VulkanBuffer> m_PackedParticlesBuffer;
 
 	std::unique_ptr<VulkanPipelineLayout>  m_GraphicsPipelineLayout;
-	VkPipeline m_GraphicePipelineHandle;
+	std::unique_ptr<VulkanGraphicsPipeline> m_GraphicsPipeline;
 
 	std::unique_ptr<VulkanCommandPool> m_GraphicsCommandPool;
 	std::vector<VkCommandBuffer> m_GraphicsCommandBufferHandles;
