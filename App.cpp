@@ -121,7 +121,14 @@ void App::Init()
 	std::vector<VkDescriptorSetLayout> compDescSetLayouts = {m_ComputeDescriptorSetLayout->GetVKDescriptorSetLayoutHandle()};
 	m_ComputePipelineLayout = std::make_unique<VulkanPipelineLayout>(m_Device->GetLogicalDeviceHandle(), compDescSetLayouts);
 
-	CreateComputePipelines();
+	std::unique_ptr<VulkanShader> computeDensityPressureShader = std::make_unique<VulkanShader>(m_Device->GetLogicalDeviceHandle(), VK_SHADER_STAGE_COMPUTE_BIT, "density_pressure.comp.spv");
+	m_ComputePipelines[0] = std::make_unique<VulkanComputePipeline>(m_Device.get(), computeDensityPressureShader.get(), m_ComputePipelineLayout.get(), m_GlobalPipelineCache.get());
+
+	std::unique_ptr<VulkanShader> computeForceShader = std::make_unique<VulkanShader>(m_Device->GetLogicalDeviceHandle(), VK_SHADER_STAGE_COMPUTE_BIT, "force.comp.spv");
+	m_ComputePipelines[1] = std::make_unique<VulkanComputePipeline>(m_Device.get(), computeForceShader.get(), m_ComputePipelineLayout.get(), m_GlobalPipelineCache.get());
+
+	std::unique_ptr<VulkanShader> computeIntegrateShader = std::make_unique<VulkanShader>(m_Device->GetLogicalDeviceHandle(), VK_SHADER_STAGE_COMPUTE_BIT, "integrate.comp.spv");
+	m_ComputePipelines[2] = std::make_unique<VulkanComputePipeline>(m_Device.get(), computeIntegrateShader.get(), m_ComputePipelineLayout.get(), m_GlobalPipelineCache.get());
 
 	m_ComputeCommandPool = std::make_unique<VulkanCommandPool>(m_Device->GetLogicalDeviceHandle(), m_Device->GetQueueIndices().computeFamily.value());
 	m_ComputeCommandBufferHandle = m_ComputeCommandPool->AllocateCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY);
@@ -225,7 +232,7 @@ void App::Update()
 	computeSubmitInfo.pSignalSemaphores = nullptr;
 
 	//update particle
-	VK_CHECK(m_Device->GetComputeQueue()->Submit(1, &computeSubmitInfo, VK_NULL_HANDLE));
+	m_Device->GetComputeQueue()->Submit(1, &computeSubmitInfo, VK_NULL_HANDLE);
 }
 void App::Simulate()
 {
@@ -239,15 +246,15 @@ void App::Simulate()
 
 	vkCmdBindDescriptorSets(m_ComputeCommandBufferHandle, VK_PIPELINE_BIND_POINT_COMPUTE, m_ComputePipelineLayout->GetVKPipelineLayoutHandle(), 0, 1, &m_ComputeDescriptorSetHandle, 0, nullptr);
 
-	vkCmdBindPipeline(m_ComputeCommandBufferHandle, VK_PIPELINE_BIND_POINT_COMPUTE, m_ComputePipelineHandles[0]);
+	vkCmdBindPipeline(m_ComputeCommandBufferHandle, VK_PIPELINE_BIND_POINT_COMPUTE, m_ComputePipelines[0]->GetVKPipelineHandle());
 	vkCmdDispatch(m_ComputeCommandBufferHandle, WORK_GROUP_NUM, 1, 1);
 	vkCmdPipelineBarrier(m_ComputeCommandBufferHandle, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 0, nullptr);
 
-	vkCmdBindPipeline(m_ComputeCommandBufferHandle, VK_PIPELINE_BIND_POINT_COMPUTE, m_ComputePipelineHandles[1]);
+	vkCmdBindPipeline(m_ComputeCommandBufferHandle, VK_PIPELINE_BIND_POINT_COMPUTE, m_ComputePipelines[1]->GetVKPipelineHandle());
 	vkCmdDispatch(m_ComputeCommandBufferHandle, WORK_GROUP_NUM, 1, 1);
 	vkCmdPipelineBarrier(m_ComputeCommandBufferHandle, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 0, nullptr);
 
-	vkCmdBindPipeline(m_ComputeCommandBufferHandle, VK_PIPELINE_BIND_POINT_COMPUTE, m_ComputePipelineHandles[2]);
+	vkCmdBindPipeline(m_ComputeCommandBufferHandle, VK_PIPELINE_BIND_POINT_COMPUTE, m_ComputePipelines[2]->GetVKPipelineHandle());
 	vkCmdDispatch(m_ComputeCommandBufferHandle, WORK_GROUP_NUM, 1, 1);
 	vkCmdPipelineBarrier(m_ComputeCommandBufferHandle, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 0, nullptr);
 
@@ -318,7 +325,7 @@ void App::SubmitAndPresent()
 	graphicsSubmitInfo.signalSemaphoreCount = 1;
 	graphicsSubmitInfo.pSignalSemaphores = &m_RenderFinishedSemaphore->GetVKSemaphoreHandle();
 
-	VK_CHECK(m_Device->GetGraphicsQueue()->Submit(1, &graphicsSubmitInfo, VK_NULL_HANDLE));
+	m_Device->GetGraphicsQueue()->Submit(1, &graphicsSubmitInfo, VK_NULL_HANDLE);
 
 	VkPresentInfoKHR presentInfo{};
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -597,53 +604,6 @@ void App::UpdateComputeDescriptorSets()
 	vkUpdateDescriptorSets(m_Device->GetLogicalDeviceHandle(), 5, writeDescriptorSets, 0, nullptr);
 }
 
-void App::CreateComputePipelines()
-{
-	VkShaderModule computeDensityPressureShaderModule = CreateShaderModuleFromSpirvFile(m_Device->GetLogicalDeviceHandle(), "density_pressure.comp.spv");
-
-	VkPipelineShaderStageCreateInfo computeShaderStageCreateInfo{};
-	computeShaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	computeShaderStageCreateInfo.pNext = nullptr;
-	computeShaderStageCreateInfo.flags = 0;
-	computeShaderStageCreateInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-	computeShaderStageCreateInfo.module = computeDensityPressureShaderModule;
-	computeShaderStageCreateInfo.pName = "main";
-	computeShaderStageCreateInfo.pSpecializationInfo = nullptr;
-
-	VkComputePipelineCreateInfo pipelineInfo{};
-	pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-	pipelineInfo.pNext = nullptr;
-	pipelineInfo.flags = 0;
-	pipelineInfo.stage = computeShaderStageCreateInfo;
-	pipelineInfo.layout = m_ComputePipelineLayout->GetVKPipelineLayoutHandle();
-	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
-	pipelineInfo.basePipelineIndex = -1;
-
-	VK_CHECK(vkCreateComputePipelines(m_Device->GetLogicalDeviceHandle(), m_GlobalPipelineCache->GetVKPipelineCacheHandle(), 1, &pipelineInfo, nullptr, &m_ComputePipelineHandles[0]));
-
-	VkShaderModule computeForceShaderModule = CreateShaderModuleFromSpirvFile(m_Device->GetLogicalDeviceHandle(), "force.comp.spv");
-
-	computeShaderStageCreateInfo.module = computeForceShaderModule;
-	pipelineInfo.stage = computeShaderStageCreateInfo;
-
-	VK_CHECK(vkCreateComputePipelines(m_Device->GetLogicalDeviceHandle(), m_GlobalPipelineCache->GetVKPipelineCacheHandle(), 1, &pipelineInfo, nullptr, &m_ComputePipelineHandles[1]));
-
-	VkShaderModule computeIntegrateShaderModule = CreateShaderModuleFromSpirvFile(m_Device->GetLogicalDeviceHandle(), "integrate.comp.spv");
-	computeShaderStageCreateInfo.module = computeIntegrateShaderModule;
-	pipelineInfo.stage = computeShaderStageCreateInfo;
-	VK_CHECK(vkCreateComputePipelines(m_Device->GetLogicalDeviceHandle(), m_GlobalPipelineCache->GetVKPipelineCacheHandle(), 1, &pipelineInfo, nullptr, &m_ComputePipelineHandles[2]));
-
-	vkDestroyShaderModule(m_Device->GetLogicalDeviceHandle(), computeIntegrateShaderModule, nullptr);
-	vkDestroyShaderModule(m_Device->GetLogicalDeviceHandle(), computeForceShaderModule, nullptr);
-	vkDestroyShaderModule(m_Device->GetLogicalDeviceHandle(), computeDensityPressureShaderModule, nullptr);
-
-	m_DeletionQueue.Add([=]()
-						{
-							for (const auto &compPipe : m_ComputePipelineHandles)
-								vkDestroyPipeline(m_Device->GetLogicalDeviceHandle(), compPipe, nullptr);
-						});
-}
-
 void App::InitParticleData(std::array<glm::vec2, PARTICLE_NUM> initParticlePosition)
 {
 	VkBuffer stagingBufferHandle = VK_NULL_HANDLE;
@@ -722,8 +682,8 @@ void App::InitParticleData(std::array<glm::vec2, PARTICLE_NUM> initParticlePosit
 	copySubmitInfo.signalSemaphoreCount = 0;
 	copySubmitInfo.pSignalSemaphores = nullptr;
 
-	VK_CHECK(m_Device->GetComputeQueue()->Submit(1, &copySubmitInfo, VK_NULL_HANDLE));
-	VK_CHECK(m_Device->GetComputeQueue()->WaitIdle());
+	m_Device->GetComputeQueue()->Submit(1, &copySubmitInfo, VK_NULL_HANDLE);
+	m_Device->GetComputeQueue()->WaitIdle();
 
 	vkFreeCommandBuffers(m_Device->GetLogicalDeviceHandle(), m_ComputeCommandPool->GetVKCommandPoolHandle(), 1, &copyCommandBufferHandle);
 	vkFreeMemory(m_Device->GetLogicalDeviceHandle(), stagingBufferDeviceMemoryHandle, nullptr);

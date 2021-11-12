@@ -1,5 +1,7 @@
 #include "VulkanQueue.h"
 #include "VulkanDevice.h"
+#include <iostream>
+#include "VulkanUtils.h"
 VulkanQueue::VulkanQueue(const VulkanDevice *device, uint32_t queueFamilyIndex, uint32_t queueIndex)
 {
     vkGetDeviceQueue(device->GetLogicalDeviceHandle(), queueFamilyIndex, queueIndex, &m_QueueHandle);
@@ -8,17 +10,17 @@ VulkanQueue::~VulkanQueue()
 {
 }
 
-VkResult VulkanQueue::Submit(uint32_t submitCount, const VkSubmitInfo *pSubmits, VkFence fence) const
+void VulkanQueue::Submit(uint32_t submitCount, const VkSubmitInfo *pSubmits, VkFence fence) const
 {
-    return vkQueueSubmit(m_QueueHandle, submitCount, pSubmits, fence);
+    VK_CHECK(vkQueueSubmit(m_QueueHandle, submitCount, pSubmits, fence));
 }
-VkResult VulkanQueue::Present(const VkPresentInfoKHR *pPresentInfo) const
+void VulkanQueue::Present(const VkPresentInfoKHR *pPresentInfo) const
 {
-    return vkQueuePresentKHR(m_QueueHandle, pPresentInfo);
+    VK_CHECK( vkQueuePresentKHR(m_QueueHandle, pPresentInfo));
 }
-VkResult VulkanQueue::WaitIdle() const
+void VulkanQueue::WaitIdle() const
 {
-    return vkQueueWaitIdle(m_QueueHandle);
+    VK_CHECK( vkQueueWaitIdle(m_QueueHandle));
 }
 
 const VkQueue &VulkanQueue::GetVKQueueHandle() const
