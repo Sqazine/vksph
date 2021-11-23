@@ -1,6 +1,6 @@
 #include "App.h"
 #include <iostream>
-#include "VulkanShader.h"
+#include "Shader.h"
 App::App(std::string title, int32_t width, int32_t height)
 	: m_IsRunning(true), m_WindowWidth(width), m_WindowHeight(height), m_WindowTitle(title)
 {
@@ -48,29 +48,29 @@ void App::Init()
 	CreateWindow(m_WindowTitle, m_WindowWidth, m_WindowHeight);
 	LoadVulkanLib();
 
-	m_Instance = std::make_unique<VulkanInstance>(m_WindowHandle, validationLayers);
-	m_Device = std::make_unique<VulkanDevice>(m_Instance.get(), deviceExtensions);
-	m_SwapChain = std::make_unique<VulkanSwapChain>(m_WindowHandle, m_Instance.get(), m_Device.get());
-	m_RenderPass = std::make_unique<VulkanRenderPass>(m_Device.get(), m_SwapChain.get());
+	m_Instance = std::make_unique<VK::Instance>(m_WindowHandle, validationLayers);
+	m_Device = std::make_unique<VK::Device>(m_Instance.get(), deviceExtensions);
+	m_SwapChain = std::make_unique<VK::SwapChain>(m_WindowHandle, m_Instance.get(), m_Device.get());
+	m_RenderPass = std::make_unique<VK::RenderPass>(m_Device.get(), m_SwapChain.get());
 
 	for (size_t i = 0; i < m_SwapChain->GetVKSwapChainImageViews().size(); ++i)
 	{
 		std::vector<VkImageView> views = {m_SwapChain->GetVKSwapChainImageViews()[i]};
-		m_SwapChainFrameBuffers.emplace_back(std::make_unique<VulkanFramebuffer>(m_Device->GetLogicalDeviceHandle(),
+		m_SwapChainFrameBuffers.emplace_back(std::make_unique<VK::Framebuffer>(m_Device.get(),
 																				 m_RenderPass->GetVKRenderPassHandle(),
 																				 views,
 																				 m_SwapChain->GetVKSwapChainExtent().width,
 																				 m_SwapChain->GetVKSwapChainExtent().height));
 	}
 
-	m_GlobalDescriptorPool = std::make_unique<VulkanDescriptorPool>(m_Device->GetLogicalDeviceHandle(), 5);
+	m_GlobalDescriptorPool = std::make_unique<VK::DescriptorPool>(m_Device.get(), 5);
 
-	m_GlobalPipelineCache = std::make_unique<VulkanPipelineCache>(m_Device->GetLogicalDeviceHandle());
+	m_GlobalPipelineCache = std::make_unique<VK::PipelineCache>(m_Device.get());
 
-	m_GraphicsPipelineLayout = std::make_unique<VulkanPipelineLayout>(m_Device->GetLogicalDeviceHandle());
+	m_GraphicsPipelineLayout = std::make_unique<VK::PipelineLayout>(m_Device.get());
 
-	std::unique_ptr<VulkanShader> vertShader = std::make_unique<VulkanShader>(m_Device->GetLogicalDeviceHandle(), VK_SHADER_STAGE_VERTEX_BIT, "particle.vert.spv");
-	std::unique_ptr<VulkanShader> fragShader = std::make_unique<VulkanShader>(m_Device->GetLogicalDeviceHandle(), VK_SHADER_STAGE_FRAGMENT_BIT, "particle.frag.spv");
+	std::unique_ptr<VK::Shader> vertShader = std::make_unique<VK::Shader>(m_Device.get(), VK_SHADER_STAGE_VERTEX_BIT, "particle.vert.spv");
+	std::unique_ptr<VK::Shader> fragShader = std::make_unique<VK::Shader>(m_Device.get(), VK_SHADER_STAGE_FRAGMENT_BIT, "particle.frag.spv");
 
 	std::vector<VkPipelineShaderStageCreateInfo> shaderStageCreateInfos;
 	shaderStageCreateInfos.emplace_back(vertShader->GetStageCreateInfo());
@@ -174,7 +174,7 @@ void App::Init()
 	colorBlendStateInfo.blendConstants[3] = 0.0f;
 
 
-	m_GraphicsPipeline = std::make_unique<VulkanGraphicsPipeline>(m_Device.get(),
+	m_GraphicsPipeline = std::make_unique<VK::GraphicsPipeline>(m_Device.get(),
 																  shaderStageCreateInfos,
 																  &vertexInputStateInfo,
 																  &inputAssemblyStateInfo,
@@ -189,11 +189,11 @@ void App::Init()
 																  m_RenderPass.get(),
 																  m_GlobalPipelineCache.get());
 
-	m_GraphicsCommandPool = std::make_unique<VulkanCommandPool>(m_Device->GetLogicalDeviceHandle(), m_Device->GetQueueIndices().graphicsFamily.value());
+	m_GraphicsCommandPool = std::make_unique<VK::CommandPool>(m_Device.get(), m_Device->GetQueueIndices().graphicsFamily.value());
 	m_GraphicsCommandBufferHandles = m_GraphicsCommandPool->AllocateCommandBuffers(m_SwapChainFrameBuffers.size(), VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
-	m_ImageAvailableSemaphore = std::make_unique<VulkanSemaphore>(m_Device->GetLogicalDeviceHandle());
-	m_RenderFinishedSemaphore = std::make_unique<VulkanSemaphore>(m_Device->GetLogicalDeviceHandle());
+	m_ImageAvailableSemaphore = std::make_unique<VK::Semaphore>(m_Device.get());
+	m_RenderFinishedSemaphore = std::make_unique<VK::Semaphore>(m_Device.get());
 
 	std::vector<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings;
 
@@ -234,21 +234,21 @@ void App::Init()
 	descriptorSetLayoutBinding.pImmutableSamplers = nullptr;
 	descriptorSetLayoutBindings.emplace_back(descriptorSetLayoutBinding);
 
-	m_ComputeDescriptorSetLayout = std::make_unique<VulkanDescriptorSetLayout>(m_Device->GetLogicalDeviceHandle(), descriptorSetLayoutBindings);
+	m_ComputeDescriptorSetLayout = std::make_unique<VK::DescriptorSetLayout>(m_Device.get(), descriptorSetLayoutBindings);
 
 	std::vector<VkDescriptorSetLayout> compDescSetLayouts = {m_ComputeDescriptorSetLayout->GetVKDescriptorSetLayoutHandle()};
-	m_ComputePipelineLayout = std::make_unique<VulkanPipelineLayout>(m_Device->GetLogicalDeviceHandle(), compDescSetLayouts);
+	m_ComputePipelineLayout = std::make_unique<VK::PipelineLayout>(m_Device.get(), compDescSetLayouts);
 
-	std::unique_ptr<VulkanShader> computeDensityPressureShader = std::make_unique<VulkanShader>(m_Device->GetLogicalDeviceHandle(), VK_SHADER_STAGE_COMPUTE_BIT, "density_pressure.comp.spv");
-	m_ComputePipelines[0] = std::make_unique<VulkanComputePipeline>(m_Device.get(), computeDensityPressureShader.get(), m_ComputePipelineLayout.get(), m_GlobalPipelineCache.get());
+	std::unique_ptr<VK::Shader> computeDensityPressureShader = std::make_unique<VK::Shader>(m_Device.get(), VK_SHADER_STAGE_COMPUTE_BIT, "density_pressure.comp.spv");
+	m_ComputePipelines[0] = std::make_unique<VK::ComputePipeline>(m_Device.get(), computeDensityPressureShader.get(), m_ComputePipelineLayout.get(), m_GlobalPipelineCache.get());
 
-	std::unique_ptr<VulkanShader> computeForceShader = std::make_unique<VulkanShader>(m_Device->GetLogicalDeviceHandle(), VK_SHADER_STAGE_COMPUTE_BIT, "force.comp.spv");
-	m_ComputePipelines[1] = std::make_unique<VulkanComputePipeline>(m_Device.get(), computeForceShader.get(), m_ComputePipelineLayout.get(), m_GlobalPipelineCache.get());
+	std::unique_ptr<VK::Shader> computeForceShader = std::make_unique<VK::Shader>(m_Device.get(), VK_SHADER_STAGE_COMPUTE_BIT, "force.comp.spv");
+	m_ComputePipelines[1] = std::make_unique<VK::ComputePipeline>(m_Device.get(), computeForceShader.get(), m_ComputePipelineLayout.get(), m_GlobalPipelineCache.get());
 
-	std::unique_ptr<VulkanShader> computeIntegrateShader = std::make_unique<VulkanShader>(m_Device->GetLogicalDeviceHandle(), VK_SHADER_STAGE_COMPUTE_BIT, "integrate.comp.spv");
-	m_ComputePipelines[2] = std::make_unique<VulkanComputePipeline>(m_Device.get(), computeIntegrateShader.get(), m_ComputePipelineLayout.get(), m_GlobalPipelineCache.get());
+	std::unique_ptr<VK::Shader> computeIntegrateShader = std::make_unique<VK::Shader>(m_Device.get(), VK_SHADER_STAGE_COMPUTE_BIT, "integrate.comp.spv");
+	m_ComputePipelines[2] = std::make_unique<VK::ComputePipeline>(m_Device.get(), computeIntegrateShader.get(), m_ComputePipelineLayout.get(), m_GlobalPipelineCache.get());
 
-	m_ComputeCommandPool = std::make_unique<VulkanCommandPool>(m_Device->GetLogicalDeviceHandle(), m_Device->GetQueueIndices().computeFamily.value());
+	m_ComputeCommandPool = std::make_unique<VK::CommandPool>(m_Device.get(), m_Device->GetQueueIndices().computeFamily.value());
 	m_ComputeCommandBufferHandle = m_ComputeCommandPool->AllocateCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
 	std::array<glm::vec2, PARTICLE_NUM> initParticlePosition;
@@ -264,7 +264,7 @@ void App::Init()
 		}
 	}
 
-	m_PackedParticlesBuffer = std::make_unique<VulkanBuffer>(m_Device.get(),
+	m_PackedParticlesBuffer = std::make_unique<VK::Buffer>(m_Device.get(),
 															 m_PackedBufferSize,
 															 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 															 VK_SHARING_MODE_EXCLUSIVE,

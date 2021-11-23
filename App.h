@@ -10,21 +10,21 @@
 #include <functional>
 #include <array>
 #include <memory>
-#include "VulkanUtils.h"
-#include "VulkanInstance.h"
-#include "VulkanDevice.h"
-#include "VulkanSwapChain.h"
-#include "VulkanRenderPass.h"
-#include "VulkanFramebuffer.h"
-#include "VulkanDescriptorPool.h"
-#include "VulkanPipelineCache.h"
-#include "VulkanSemaphore.h"
-#include "VulkanPipelineLayout.h"
-#include "VulkanCommandPool.h"
-#include "VulkanDescriptorSetLayout.h"
-#include "VulkanBuffer.h"
-#include "VulkanComputePipeline.h"
-#include "VulkanGraphicsPipeline.h"
+#include "Utils.h"
+#include "Instance.h"
+#include "Device.h"
+#include "SwapChain.h"
+#include "RenderPass.h"
+#include "Framebuffer.h"
+#include "DescriptorPool.h"
+#include "PipelineCache.h"
+#include "Semaphore.h"
+#include "PipelineLayout.h"
+#include "CommandPool.h"
+#include "DescriptorSetLayout.h"
+#include "Buffer.h"
+#include "ComputePipeline.h"
+#include "GraphicsPipeline.h"
 
 #define PARTICLE_NUM 20000
 #define PARTICLE_RADIUS 0.005f
@@ -65,38 +65,38 @@ private:
 	int32_t m_WindowWidth, m_WindowHeight;
 	SDL_Window *m_WindowHandle;
 
-	std::unique_ptr<VulkanInstance> m_Instance;
-	std::unique_ptr<VulkanDevice> m_Device;
-	std::unique_ptr<VulkanSwapChain> m_SwapChain;
-	std::unique_ptr<VulkanRenderPass> m_RenderPass;
-	std::vector<std::unique_ptr<VulkanFramebuffer>> m_SwapChainFrameBuffers;
-	std::unique_ptr<VulkanDescriptorPool> m_GlobalDescriptorPool;
-	std::unique_ptr<VulkanPipelineCache> m_GlobalPipelineCache;
+	std::unique_ptr<VK::Instance> m_Instance;
+	std::unique_ptr<VK::Device> m_Device;
+	std::unique_ptr<VK::SwapChain> m_SwapChain;
+	std::unique_ptr<VK::RenderPass> m_RenderPass;
+	std::vector<std::unique_ptr<VK::Framebuffer>> m_SwapChainFrameBuffers;
+	std::unique_ptr<VK::DescriptorPool> m_GlobalDescriptorPool;
+	std::unique_ptr<VK::PipelineCache> m_GlobalPipelineCache;
 
-	std::unique_ptr<VulkanBuffer> m_PackedParticlesBuffer;
+	std::unique_ptr<VK::Buffer> m_PackedParticlesBuffer;
 
-	std::unique_ptr<VulkanPipelineLayout>  m_GraphicsPipelineLayout;
-	std::unique_ptr<VulkanGraphicsPipeline> m_GraphicsPipeline;
+	std::unique_ptr<VK::PipelineLayout>  m_GraphicsPipelineLayout;
+	std::unique_ptr<VK::GraphicsPipeline> m_GraphicsPipeline;
 
-	std::unique_ptr<VulkanCommandPool> m_GraphicsCommandPool;
+	std::unique_ptr<VK::CommandPool> m_GraphicsCommandPool;
 	std::vector<VkCommandBuffer> m_GraphicsCommandBufferHandles;
 
-	std::unique_ptr<VulkanSemaphore> m_ImageAvailableSemaphore;
-	std::unique_ptr<VulkanSemaphore> m_RenderFinishedSemaphore;
+	std::unique_ptr<VK::Semaphore> m_ImageAvailableSemaphore;
+	std::unique_ptr<VK::Semaphore> m_RenderFinishedSemaphore;
 
-	std::unique_ptr<VulkanDescriptorSetLayout> m_ComputeDescriptorSetLayout;
+	std::unique_ptr<VK::DescriptorSetLayout> m_ComputeDescriptorSetLayout;
 	VkDescriptorSet m_ComputeDescriptorSetHandle;
-	std::unique_ptr<VulkanPipelineLayout > m_ComputePipelineLayout;
-	 std::array<std::unique_ptr<VulkanComputePipeline>,3> m_ComputePipelines;
+	std::unique_ptr<VK::PipelineLayout > m_ComputePipelineLayout;
+	 std::array<std::unique_ptr<VK::ComputePipeline>,3> m_ComputePipelines;
 
-	std::unique_ptr<VulkanCommandPool> m_ComputeCommandPool;
+	std::unique_ptr<VK::CommandPool> m_ComputeCommandPool;
 	VkCommandBuffer m_ComputeCommandBufferHandle;
 
 	VkPipelineStageFlags waitDstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
 	uint32_t m_SwapChainImageIndex = 0;
 
-	DeletionQueue m_DeletionQueue;
+	VK::DeletionQueue m_DeletionQueue;
 
 	const uint64_t m_PosSsboSize = sizeof(glm::vec2) * PARTICLE_NUM;
 	const uint64_t m_VelocitySsboSize = sizeof(glm::vec2) * PARTICLE_NUM;
