@@ -8,7 +8,7 @@ namespace VK
         Queue(const class Device *device, uint32_t queueFamilyIndex, uint32_t queueIndex);
         ~Queue();
 
-        void Submit(uint32_t submitCount, const VkSubmitInfo *pSubmits, VkFence fence) const;
+        void Submit(uint32_t submitCount, const VkSubmitInfo *pSubmits,class Fence* fence=nullptr) const;
         void Present(const VkPresentInfoKHR *pPresentInfo) const;
         void WaitIdle() const;
 

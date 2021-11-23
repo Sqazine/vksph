@@ -459,7 +459,7 @@ void App::SubmitAndPresent()
 	graphicsSubmitInfo.signalSemaphoreCount = 1;
 	graphicsSubmitInfo.pSignalSemaphores = &m_RenderFinishedSemaphores[currentFrame]->GetVKSemaphoreHandle();
 
-	m_Device->GetGraphicsQueue()->Submit(1, &graphicsSubmitInfo, m_InFlightFences[currentFrame]->GetVKFenceHandle());
+	m_Device->GetGraphicsQueue()->Submit(1, &graphicsSubmitInfo, m_InFlightFences[currentFrame].get());
 
 	VkPresentInfoKHR presentInfo{};
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -684,7 +684,7 @@ void App::InitParticleData(std::array<glm::vec2, PARTICLE_NUM> initParticlePosit
 	copySubmitInfo.signalSemaphoreCount = 0;
 	copySubmitInfo.pSignalSemaphores = nullptr;
 
-	m_Device->GetComputeQueue()->Submit(1, &copySubmitInfo, VK_NULL_HANDLE);
+	m_Device->GetComputeQueue()->Submit(1, &copySubmitInfo);
 	m_Device->GetComputeQueue()->WaitIdle();
 
 	vkFreeCommandBuffers(m_Device->GetLogicalDeviceHandle(), m_ComputeCommandPool->GetVKCommandPoolHandle(), 1, &copyCommandBufferHandle);
