@@ -25,11 +25,14 @@
 #include "Buffer.h"
 #include "ComputePipeline.h"
 #include "GraphicsPipeline.h"
+#include "Fence.h"
 
 #define PARTICLE_NUM 20000
 #define PARTICLE_RADIUS 0.005f
 #define WORK_GROUP_SIZE 128
 #define WORK_GROUP_NUM ((PARTICLE_NUM + WORK_GROUP_SIZE - 1) / WORK_GROUP_SIZE)
+
+#define MAX_FRAMES_IN_FLIGHT 2
 
 const std::vector<const char *> validationLayers = {
 	"VK_LAYER_KHRONOS_validation"};
@@ -81,8 +84,11 @@ private:
 	std::unique_ptr<VK::CommandPool> m_GraphicsCommandPool;
 	std::vector<VkCommandBuffer> m_GraphicsCommandBufferHandles;
 
-	std::unique_ptr<VK::Semaphore> m_ImageAvailableSemaphore;
-	std::unique_ptr<VK::Semaphore> m_RenderFinishedSemaphore;
+	std::vector<std::unique_ptr<VK::Semaphore>> m_ImageAvailableSemaphores;
+	std::vector<std::unique_ptr<VK::Semaphore>> m_RenderFinishedSemaphores;
+	std::vector<std::unique_ptr<VK::Fence>> m_InFlightFences;
+	std::vector<VK::Fence*> m_ImagesInFlight;
+	size_t currentFrame=0;
 
 	std::unique_ptr<VK::DescriptorSetLayout> m_ComputeDescriptorSetLayout;
 	VkDescriptorSet m_ComputeDescriptorSetHandle;
@@ -93,8 +99,6 @@ private:
 	VkCommandBuffer m_ComputeCommandBufferHandle;
 
 	VkPipelineStageFlags waitDstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-
-	uint32_t m_SwapChainImageIndex = 0;
 
 	VK::DeletionQueue m_DeletionQueue;
 

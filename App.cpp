@@ -57,10 +57,10 @@ void App::Init()
 	{
 		std::vector<VkImageView> views = {m_SwapChain->GetVKSwapChainImageViews()[i]};
 		m_SwapChainFrameBuffers.emplace_back(std::make_unique<VK::Framebuffer>(m_Device.get(),
-																				 m_RenderPass->GetVKRenderPassHandle(),
-																				 views,
-																				 m_SwapChain->GetVKSwapChainExtent().width,
-																				 m_SwapChain->GetVKSwapChainExtent().height));
+																			   m_RenderPass->GetVKRenderPassHandle(),
+																			   views,
+																			   m_SwapChain->GetVKSwapChainExtent().width,
+																			   m_SwapChain->GetVKSwapChainExtent().height));
 	}
 
 	m_GlobalDescriptorPool = std::make_unique<VK::DescriptorPool>(m_Device.get(), 5);
@@ -173,27 +173,35 @@ void App::Init()
 	colorBlendStateInfo.blendConstants[2] = 0.0f;
 	colorBlendStateInfo.blendConstants[3] = 0.0f;
 
-
 	m_GraphicsPipeline = std::make_unique<VK::GraphicsPipeline>(m_Device.get(),
-																  shaderStageCreateInfos,
-																  &vertexInputStateInfo,
-																  &inputAssemblyStateInfo,
-																  nullptr,
-																  &viewportStateInfo,
-																  &rasterizationStateInfo,
-																  &multiSampleStateInfo,
-																  nullptr,
-																  &colorBlendStateInfo,
-																  nullptr,
-																  m_GraphicsPipelineLayout.get(),
-																  m_RenderPass.get(),
-																  m_GlobalPipelineCache.get());
+																shaderStageCreateInfos,
+																&vertexInputStateInfo,
+																&inputAssemblyStateInfo,
+																nullptr,
+																&viewportStateInfo,
+																&rasterizationStateInfo,
+																&multiSampleStateInfo,
+																nullptr,
+																&colorBlendStateInfo,
+																nullptr,
+																m_GraphicsPipelineLayout.get(),
+																m_RenderPass.get(),
+																m_GlobalPipelineCache.get());
 
 	m_GraphicsCommandPool = std::make_unique<VK::CommandPool>(m_Device.get(), m_Device->GetQueueIndices().graphicsFamily.value());
 	m_GraphicsCommandBufferHandles = m_GraphicsCommandPool->AllocateCommandBuffers(m_SwapChainFrameBuffers.size(), VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
-	m_ImageAvailableSemaphore = std::make_unique<VK::Semaphore>(m_Device.get());
-	m_RenderFinishedSemaphore = std::make_unique<VK::Semaphore>(m_Device.get());
+	m_ImageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+	m_RenderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+	m_InFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+	m_ImagesInFlight.resize(m_SwapChain->GetVKSwapChainImages().size(),nullptr);
+
+	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+	{
+		m_ImageAvailableSemaphores[i] = std::make_unique<VK::Semaphore>(m_Device.get());
+		m_RenderFinishedSemaphores[i] = std::make_unique<VK::Semaphore>(m_Device.get());
+		m_InFlightFences[i] = std::make_unique<VK::Fence>(m_Device.get(), VK_FENCE_CREATE_SIGNALED_BIT);
+	}
 
 	std::vector<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings;
 
@@ -265,10 +273,10 @@ void App::Init()
 	}
 
 	m_PackedParticlesBuffer = std::make_unique<VK::Buffer>(m_Device.get(),
-															 m_PackedBufferSize,
-															 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-															 VK_SHARING_MODE_EXCLUSIVE,
-															 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+														   m_PackedBufferSize,
+														   VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+														   VK_SHARING_MODE_EXCLUSIVE,
+														   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
 	InitParticleData(initParticlePosition);
 	UpdateComputeDescriptorSets();
@@ -430,33 +438,43 @@ void App::Draw()
 
 void App::SubmitAndPresent()
 {
-	vkAcquireNextImageKHR(m_Device->GetLogicalDeviceHandle(), m_SwapChain->GetVKSwapChainHandle(), UINT64_MAX, m_ImageAvailableSemaphore->GetVKSemaphoreHandle(), VK_NULL_HANDLE, &m_SwapChainImageIndex);
+	uint32_t swapChainImageIdx=0;
+
+	vkAcquireNextImageKHR(m_Device->GetLogicalDeviceHandle(), m_SwapChain->GetVKSwapChainHandle(), UINT64_MAX, m_ImageAvailableSemaphores[currentFrame]->GetVKSemaphoreHandle(), VK_NULL_HANDLE, &swapChainImageIdx);
+
+		if (m_ImagesInFlight[swapChainImageIdx]!= nullptr)
+			m_ImagesInFlight[swapChainImageIdx]->Wait(VK_TRUE,UINT64_MAX);
+		m_ImagesInFlight[swapChainImageIdx] = m_InFlightFences[currentFrame].get();
+
+		m_InFlightFences[currentFrame]->Reset();
 
 	VkSubmitInfo graphicsSubmitInfo{};
 	graphicsSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 	graphicsSubmitInfo.pNext = nullptr;
 	graphicsSubmitInfo.waitSemaphoreCount = 1;
-	graphicsSubmitInfo.pWaitSemaphores = &m_ImageAvailableSemaphore->GetVKSemaphoreHandle();
+	graphicsSubmitInfo.pWaitSemaphores = &m_ImageAvailableSemaphores[currentFrame]->GetVKSemaphoreHandle();
 	graphicsSubmitInfo.pWaitDstStageMask = &waitDstStageMask;
 	graphicsSubmitInfo.commandBufferCount = 1;
-	graphicsSubmitInfo.pCommandBuffers = m_GraphicsCommandBufferHandles.data() + m_SwapChainImageIndex;
+	graphicsSubmitInfo.pCommandBuffers = &m_GraphicsCommandBufferHandles[swapChainImageIdx];
 	graphicsSubmitInfo.signalSemaphoreCount = 1;
-	graphicsSubmitInfo.pSignalSemaphores = &m_RenderFinishedSemaphore->GetVKSemaphoreHandle();
+	graphicsSubmitInfo.pSignalSemaphores = &m_RenderFinishedSemaphores[currentFrame]->GetVKSemaphoreHandle();
 
-	m_Device->GetGraphicsQueue()->Submit(1, &graphicsSubmitInfo, VK_NULL_HANDLE);
+	m_Device->GetGraphicsQueue()->Submit(1, &graphicsSubmitInfo, m_InFlightFences[currentFrame]->GetVKFenceHandle());
 
 	VkPresentInfoKHR presentInfo{};
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 	presentInfo.pNext = nullptr;
 	presentInfo.waitSemaphoreCount = 1;
-	presentInfo.pWaitSemaphores = &m_RenderFinishedSemaphore->GetVKSemaphoreHandle();
+	presentInfo.pWaitSemaphores = &m_RenderFinishedSemaphores[currentFrame]->GetVKSemaphoreHandle();
 	presentInfo.swapchainCount = 1;
 	presentInfo.pSwapchains = &m_SwapChain->GetVKSwapChainHandle();
-	presentInfo.pImageIndices = &m_SwapChainImageIndex;
+	presentInfo.pImageIndices = &swapChainImageIdx;
 	presentInfo.pResults = nullptr;
 
 	m_Device->GetPresentQueue()->Present(&presentInfo);
 	m_Device->GetPresentQueue()->WaitIdle();
+
+	currentFrame=(currentFrame+1)%MAX_FRAMES_IN_FLIGHT;
 }
 
 void App::CreateWindow(std::string title, int32_t width, int32_t height)
@@ -496,7 +514,6 @@ void App::LoadVulkanLib()
 	m_DeletionQueue.Add([=]()
 						{ SDL_Vulkan_UnloadLibrary(); });
 }
-
 
 void App::UpdateComputeDescriptorSets()
 {
