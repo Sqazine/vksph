@@ -1,17 +1,16 @@
 #include "App.h"
 #include <iostream>
 #include "Shader.h"
-App::App(std::string title, int32_t width, int32_t height)
-	: m_IsRunning(true), m_WindowWidth(width), m_WindowHeight(height), m_WindowTitle(title)
+#include "GraphicsContext.h"
+App::App(const WindowCreateInfo &windowInfo)
+	: m_IsRunning(true), m_WinInfo(windowInfo)
 {
 }
 
 App::~App()
 {
-	m_Device->WaitIdle();
-
-	m_DeletionQueue.Flush();
-
+	VK::GraphicsContext::GetDevice()->WaitIdle();
+	VK::GraphicsContext::Destroy();
 	SDL_Quit();
 }
 
@@ -45,32 +44,29 @@ void App::Init()
 	system(str.c_str());
 #endif
 
-	CreateWindow(m_WindowTitle, m_WindowWidth, m_WindowHeight);
-	LoadVulkanLib();
+	VK::GraphicsContext::Init(m_WinInfo);
 
-	m_Instance = std::make_unique<VK::Instance>(m_WindowHandle, validationLayers);
-	m_Device = std::make_unique<VK::Device>(m_Instance.get(), deviceExtensions);
-	m_SwapChain = std::make_unique<VK::SwapChain>(m_WindowHandle, m_Instance.get(), m_Device.get());
-	m_RenderPass = std::make_unique<VK::RenderPass>(m_Device.get(), m_SwapChain.get());
+	m_SwapChain = std::make_unique<VK::SwapChain>();
+	m_RenderPass = std::make_unique<VK::RenderPass>(m_SwapChain.get());
 
 	for (size_t i = 0; i < m_SwapChain->GetVKSwapChainImageViews().size(); ++i)
 	{
 		std::vector<VkImageView> views = {m_SwapChain->GetVKSwapChainImageViews()[i]};
-		m_SwapChainFrameBuffers.emplace_back(std::make_unique<VK::Framebuffer>(m_Device.get(),
-																			   m_RenderPass->GetVKRenderPassHandle(),
-																			   views,
-																			   m_SwapChain->GetVKSwapChainExtent().width,
-																			   m_SwapChain->GetVKSwapChainExtent().height));
+		m_SwapChainFrameBuffers.emplace_back(std::make_unique<VK::Framebuffer>(
+			m_RenderPass->GetVKRenderPassHandle(),
+			views,
+			m_SwapChain->GetVKSwapChainExtent().width,
+			m_SwapChain->GetVKSwapChainExtent().height));
 	}
 
-	m_GlobalDescriptorPool = std::make_unique<VK::DescriptorPool>(m_Device.get(), 5);
+	m_GlobalDescriptorPool = std::make_unique<VK::DescriptorPool>(5);
 
-	m_GlobalPipelineCache = std::make_unique<VK::PipelineCache>(m_Device.get());
+	m_GlobalPipelineCache = std::make_unique<VK::PipelineCache>();
 
-	m_GraphicsPipelineLayout = std::make_unique<VK::PipelineLayout>(m_Device.get());
+	m_GraphicsPipelineLayout = std::make_unique<VK::PipelineLayout>();
 
-	std::unique_ptr<VK::Shader> vertShader = std::make_unique<VK::Shader>(m_Device.get(), VK_SHADER_STAGE_VERTEX_BIT, "particle.vert.spv");
-	std::unique_ptr<VK::Shader> fragShader = std::make_unique<VK::Shader>(m_Device.get(), VK_SHADER_STAGE_FRAGMENT_BIT, "particle.frag.spv");
+	std::unique_ptr<VK::Shader> vertShader = std::make_unique<VK::Shader>(VK_SHADER_STAGE_VERTEX_BIT, "particle.vert.spv");
+	std::unique_ptr<VK::Shader> fragShader = std::make_unique<VK::Shader>(VK_SHADER_STAGE_FRAGMENT_BIT, "particle.frag.spv");
 
 	std::vector<VkPipelineShaderStageCreateInfo> shaderStageCreateInfos;
 	shaderStageCreateInfos.emplace_back(vertShader->GetStageCreateInfo());
@@ -173,34 +169,34 @@ void App::Init()
 	colorBlendStateInfo.blendConstants[2] = 0.0f;
 	colorBlendStateInfo.blendConstants[3] = 0.0f;
 
-	m_GraphicsPipeline = std::make_unique<VK::GraphicsPipeline>(m_Device.get(),
-																shaderStageCreateInfos,
-																&vertexInputStateInfo,
-																&inputAssemblyStateInfo,
-																nullptr,
-																&viewportStateInfo,
-																&rasterizationStateInfo,
-																&multiSampleStateInfo,
-																nullptr,
-																&colorBlendStateInfo,
-																nullptr,
-																m_GraphicsPipelineLayout.get(),
-																m_RenderPass.get(),
-																m_GlobalPipelineCache.get());
+	m_GraphicsPipeline = std::make_unique<VK::GraphicsPipeline>(
+		shaderStageCreateInfos,
+		&vertexInputStateInfo,
+		&inputAssemblyStateInfo,
+		nullptr,
+		&viewportStateInfo,
+		&rasterizationStateInfo,
+		&multiSampleStateInfo,
+		nullptr,
+		&colorBlendStateInfo,
+		nullptr,
+		m_GraphicsPipelineLayout.get(),
+		m_RenderPass.get(),
+		m_GlobalPipelineCache.get());
 
-	m_GraphicsCommandPool = std::make_unique<VK::CommandPool>(m_Device.get(), m_Device->GetQueueIndices().graphicsFamily.value());
+	m_GraphicsCommandPool = std::make_unique<VK::CommandPool>(VK::GraphicsContext::GetDevice()->GetQueueIndices().graphicsFamily.value());
 	m_GraphicsCommandBufferHandles = m_GraphicsCommandPool->AllocateCommandBuffers(m_SwapChainFrameBuffers.size(), VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
 	m_ImageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
 	m_RenderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
 	m_InFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
-	m_ImagesInFlight.resize(m_SwapChain->GetVKSwapChainImages().size(),nullptr);
+	m_ImagesInFlight.resize(m_SwapChain->GetVKSwapChainImages().size(), nullptr);
 
 	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
 	{
-		m_ImageAvailableSemaphores[i] = std::make_unique<VK::Semaphore>(m_Device.get());
-		m_RenderFinishedSemaphores[i] = std::make_unique<VK::Semaphore>(m_Device.get());
-		m_InFlightFences[i] = std::make_unique<VK::Fence>(m_Device.get(), VK_FENCE_CREATE_SIGNALED_BIT);
+		m_ImageAvailableSemaphores[i] = std::make_unique<VK::Semaphore>();
+		m_RenderFinishedSemaphores[i] = std::make_unique<VK::Semaphore>();
+		m_InFlightFences[i] = std::make_unique<VK::Fence>(VK_FENCE_CREATE_SIGNALED_BIT);
 	}
 
 	std::vector<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings;
@@ -242,21 +238,21 @@ void App::Init()
 	descriptorSetLayoutBinding.pImmutableSamplers = nullptr;
 	descriptorSetLayoutBindings.emplace_back(descriptorSetLayoutBinding);
 
-	m_ComputeDescriptorSetLayout = std::make_unique<VK::DescriptorSetLayout>(m_Device.get(), descriptorSetLayoutBindings);
+	m_ComputeDescriptorSetLayout = std::make_unique<VK::DescriptorSetLayout>(descriptorSetLayoutBindings);
 
 	std::vector<VkDescriptorSetLayout> compDescSetLayouts = {m_ComputeDescriptorSetLayout->GetVKDescriptorSetLayoutHandle()};
-	m_ComputePipelineLayout = std::make_unique<VK::PipelineLayout>(m_Device.get(), compDescSetLayouts);
+	m_ComputePipelineLayout = std::make_unique<VK::PipelineLayout>(compDescSetLayouts);
 
-	std::unique_ptr<VK::Shader> computeDensityPressureShader = std::make_unique<VK::Shader>(m_Device.get(), VK_SHADER_STAGE_COMPUTE_BIT, "density_pressure.comp.spv");
-	m_ComputePipelines[0] = std::make_unique<VK::ComputePipeline>(m_Device.get(), computeDensityPressureShader.get(), m_ComputePipelineLayout.get(), m_GlobalPipelineCache.get());
+	std::unique_ptr<VK::Shader> computeDensityPressureShader = std::make_unique<VK::Shader>(VK_SHADER_STAGE_COMPUTE_BIT, "density_pressure.comp.spv");
+	m_ComputePipelines[0] = std::make_unique<VK::ComputePipeline>(computeDensityPressureShader.get(), m_ComputePipelineLayout.get(), m_GlobalPipelineCache.get());
 
-	std::unique_ptr<VK::Shader> computeForceShader = std::make_unique<VK::Shader>(m_Device.get(), VK_SHADER_STAGE_COMPUTE_BIT, "force.comp.spv");
-	m_ComputePipelines[1] = std::make_unique<VK::ComputePipeline>(m_Device.get(), computeForceShader.get(), m_ComputePipelineLayout.get(), m_GlobalPipelineCache.get());
+	std::unique_ptr<VK::Shader> computeForceShader = std::make_unique<VK::Shader>(VK_SHADER_STAGE_COMPUTE_BIT, "force.comp.spv");
+	m_ComputePipelines[1] = std::make_unique<VK::ComputePipeline>(computeForceShader.get(), m_ComputePipelineLayout.get(), m_GlobalPipelineCache.get());
 
-	std::unique_ptr<VK::Shader> computeIntegrateShader = std::make_unique<VK::Shader>(m_Device.get(), VK_SHADER_STAGE_COMPUTE_BIT, "integrate.comp.spv");
-	m_ComputePipelines[2] = std::make_unique<VK::ComputePipeline>(m_Device.get(), computeIntegrateShader.get(), m_ComputePipelineLayout.get(), m_GlobalPipelineCache.get());
+	std::unique_ptr<VK::Shader> computeIntegrateShader = std::make_unique<VK::Shader>(VK_SHADER_STAGE_COMPUTE_BIT, "integrate.comp.spv");
+	m_ComputePipelines[2] = std::make_unique<VK::ComputePipeline>(computeIntegrateShader.get(), m_ComputePipelineLayout.get(), m_GlobalPipelineCache.get());
 
-	m_ComputeCommandPool = std::make_unique<VK::CommandPool>(m_Device.get(), m_Device->GetQueueIndices().computeFamily.value());
+	m_ComputeCommandPool = std::make_unique<VK::CommandPool>(VK::GraphicsContext::GetDevice()->GetQueueIndices().computeFamily.value());
 	m_ComputeCommandBufferHandle = m_ComputeCommandPool->AllocateCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
 	std::array<glm::vec2, PARTICLE_NUM> initParticlePosition;
@@ -272,11 +268,11 @@ void App::Init()
 		}
 	}
 
-	m_PackedParticlesBuffer = std::make_unique<VK::Buffer>(m_Device.get(),
-														   m_PackedBufferSize,
-														   VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-														   VK_SHARING_MODE_EXCLUSIVE,
-														   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	m_PackedParticlesBuffer = std::make_unique<VK::Buffer>(
+		m_PackedBufferSize,
+		VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+		VK_SHARING_MODE_EXCLUSIVE,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
 	InitParticleData(initParticlePosition);
 	UpdateComputeDescriptorSets();
@@ -358,7 +354,7 @@ void App::Update()
 	computeSubmitInfo.pSignalSemaphores = nullptr;
 
 	//update particle
-	m_Device->GetComputeQueue()->Submit(1, &computeSubmitInfo, VK_NULL_HANDLE);
+	VK::GraphicsContext::GetDevice()->GetComputeQueue()->Submit(1, &computeSubmitInfo, VK_NULL_HANDLE);
 }
 void App::Simulate()
 {
@@ -438,15 +434,15 @@ void App::Draw()
 
 void App::SubmitAndPresent()
 {
-	uint32_t swapChainImageIdx=0;
+	uint32_t swapChainImageIdx = 0;
 
-	vkAcquireNextImageKHR(m_Device->GetLogicalDeviceHandle(), m_SwapChain->GetVKSwapChainHandle(), UINT64_MAX, m_ImageAvailableSemaphores[currentFrame]->GetVKSemaphoreHandle(), VK_NULL_HANDLE, &swapChainImageIdx);
+	vkAcquireNextImageKHR(VK::GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), m_SwapChain->GetVKSwapChainHandle(), UINT64_MAX, m_ImageAvailableSemaphores[currentFrame]->GetVKSemaphoreHandle(), VK_NULL_HANDLE, &swapChainImageIdx);
 
-		if (m_ImagesInFlight[swapChainImageIdx]!= nullptr)
-			m_ImagesInFlight[swapChainImageIdx]->Wait(VK_TRUE,UINT64_MAX);
-		m_ImagesInFlight[swapChainImageIdx] = m_InFlightFences[currentFrame].get();
+	if (m_ImagesInFlight[swapChainImageIdx] != nullptr)
+		m_ImagesInFlight[swapChainImageIdx]->Wait(VK_TRUE, UINT64_MAX);
+	m_ImagesInFlight[swapChainImageIdx] = m_InFlightFences[currentFrame].get();
 
-		m_InFlightFences[currentFrame]->Reset();
+	m_InFlightFences[currentFrame]->Reset();
 
 	VkSubmitInfo graphicsSubmitInfo{};
 	graphicsSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -459,7 +455,7 @@ void App::SubmitAndPresent()
 	graphicsSubmitInfo.signalSemaphoreCount = 1;
 	graphicsSubmitInfo.pSignalSemaphores = &m_RenderFinishedSemaphores[currentFrame]->GetVKSemaphoreHandle();
 
-	m_Device->GetGraphicsQueue()->Submit(1, &graphicsSubmitInfo, m_InFlightFences[currentFrame].get());
+	VK::GraphicsContext::GetDevice()->GetGraphicsQueue()->Submit(1, &graphicsSubmitInfo, m_InFlightFences[currentFrame].get());
 
 	VkPresentInfoKHR presentInfo{};
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -471,48 +467,10 @@ void App::SubmitAndPresent()
 	presentInfo.pImageIndices = &swapChainImageIdx;
 	presentInfo.pResults = nullptr;
 
-	m_Device->GetPresentQueue()->Present(&presentInfo);
-	m_Device->GetPresentQueue()->WaitIdle();
+	VK::GraphicsContext::GetDevice()->GetPresentQueue()->Present(&presentInfo);
+	VK::GraphicsContext::GetDevice()->GetPresentQueue()->WaitIdle();
 
-	currentFrame=(currentFrame+1)%MAX_FRAMES_IN_FLIGHT;
-}
-
-void App::CreateWindow(std::string title, int32_t width, int32_t height)
-{
-	uint32_t windowFlag = SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_VULKAN | SDL_WINDOW_SHOWN;
-
-	m_WindowHandle = SDL_CreateWindow(title.c_str(),
-									  SDL_WINDOWPOS_CENTERED,
-									  SDL_WINDOWPOS_CENTERED,
-									  width,
-									  height,
-									  windowFlag);
-
-	m_DeletionQueue.Add([=]()
-						{ SDL_DestroyWindow(m_WindowHandle); });
-}
-
-void App::LoadVulkanLib()
-{
-
-	int flag = SDL_Vulkan_LoadLibrary(nullptr);
-	if (flag != 0)
-	{
-		SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Not Support vulkan:%s\n", SDL_GetError());
-		exit(1);
-	}
-
-	void *instanceProcAddr = SDL_Vulkan_GetVkGetInstanceProcAddr();
-	if (!instanceProcAddr)
-	{
-		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-					 "SDL_Vulkan_GetVkGetInstanceProcAddr(): %s\n",
-					 SDL_GetError());
-		exit(1);
-	}
-
-	m_DeletionQueue.Add([=]()
-						{ SDL_Vulkan_UnloadLibrary(); });
+	currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
 void App::UpdateComputeDescriptorSets()
@@ -524,7 +482,7 @@ void App::UpdateComputeDescriptorSets()
 	descriptorSetAllocInfo.descriptorPool = m_GlobalDescriptorPool->GetVKDescriptorPoolHandle();
 	descriptorSetAllocInfo.descriptorSetCount = 1;
 
-	VK_CHECK(vkAllocateDescriptorSets(m_Device->GetLogicalDeviceHandle(), &descriptorSetAllocInfo, &m_ComputeDescriptorSetHandle));
+	VK_CHECK(vkAllocateDescriptorSets(VK::GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), &descriptorSetAllocInfo, &m_ComputeDescriptorSetHandle));
 
 	VkDescriptorBufferInfo descriptorBufferInfos[5];
 	descriptorBufferInfos[0].buffer = m_PackedParticlesBuffer->GetVKBufferHandle();
@@ -603,7 +561,7 @@ void App::UpdateComputeDescriptorSets()
 	writeDescriptorSets[4].pBufferInfo = &descriptorBufferInfos[4];
 	writeDescriptorSets[4].pTexelBufferView = nullptr;
 
-	vkUpdateDescriptorSets(m_Device->GetLogicalDeviceHandle(), 5, writeDescriptorSets, 0, nullptr);
+	vkUpdateDescriptorSets(VK::GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), 5, writeDescriptorSets, 0, nullptr);
 }
 
 void App::InitParticleData(std::array<glm::vec2, PARTICLE_NUM> initParticlePosition)
@@ -617,34 +575,34 @@ void App::InitParticleData(std::array<glm::vec2, PARTICLE_NUM> initParticlePosit
 	stagingBufferCreateInfo.flags = 0;
 	stagingBufferCreateInfo.size = m_PackedBufferSize;
 	stagingBufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-	if (!m_Device->GetQueueIndices().IsSameFamily())
+	if (!VK::GraphicsContext::GetDevice()->GetQueueIndices().IsSameFamily())
 		stagingBufferCreateInfo.sharingMode = VK_SHARING_MODE_CONCURRENT;
 	else
 		stagingBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	stagingBufferCreateInfo.queueFamilyIndexCount = 0;
 	stagingBufferCreateInfo.pQueueFamilyIndices = nullptr;
 
-	vkCreateBuffer(m_Device->GetLogicalDeviceHandle(), &stagingBufferCreateInfo, nullptr, &stagingBufferHandle);
+	vkCreateBuffer(VK::GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), &stagingBufferCreateInfo, nullptr, &stagingBufferHandle);
 
 	VkMemoryRequirements stagingBufferMemoryRequirements;
-	vkGetBufferMemoryRequirements(m_Device->GetLogicalDeviceHandle(), stagingBufferHandle, &stagingBufferMemoryRequirements);
+	vkGetBufferMemoryRequirements(VK::GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), stagingBufferHandle, &stagingBufferMemoryRequirements);
 
 	VkMemoryAllocateInfo stagingBufferMemoryAllocInfo;
 	stagingBufferMemoryAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	stagingBufferMemoryAllocInfo.pNext = nullptr;
 	stagingBufferMemoryAllocInfo.allocationSize = stagingBufferMemoryRequirements.size;
-	stagingBufferMemoryAllocInfo.memoryTypeIndex = m_Device->FindMemoryType(stagingBufferMemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	stagingBufferMemoryAllocInfo.memoryTypeIndex = VK::GraphicsContext::GetDevice()->FindMemoryType(stagingBufferMemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
-	VK_CHECK(vkAllocateMemory(m_Device->GetLogicalDeviceHandle(), &stagingBufferMemoryAllocInfo, nullptr, &stagingBufferDeviceMemoryHandle));
+	VK_CHECK(vkAllocateMemory(VK::GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), &stagingBufferMemoryAllocInfo, nullptr, &stagingBufferDeviceMemoryHandle));
 
-	vkBindBufferMemory(m_Device->GetLogicalDeviceHandle(), stagingBufferHandle, stagingBufferDeviceMemoryHandle, 0);
+	vkBindBufferMemory(VK::GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), stagingBufferHandle, stagingBufferDeviceMemoryHandle, 0);
 
 	void *mappedMemory = nullptr;
-	vkMapMemory(m_Device->GetLogicalDeviceHandle(), stagingBufferDeviceMemoryHandle, 0, stagingBufferMemoryRequirements.size, 0, &mappedMemory);
+	vkMapMemory(VK::GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), stagingBufferDeviceMemoryHandle, 0, stagingBufferMemoryRequirements.size, 0, &mappedMemory);
 
 	std::memset(mappedMemory, 0, m_PackedBufferSize);
 	std::memcpy(mappedMemory, initParticlePosition.data(), m_PosSsboSize);
-	vkUnmapMemory(m_Device->GetLogicalDeviceHandle(), stagingBufferDeviceMemoryHandle);
+	vkUnmapMemory(VK::GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), stagingBufferDeviceMemoryHandle);
 
 	VkCommandBuffer copyCommandBufferHandle;
 	VkCommandBufferAllocateInfo copyCommandBufferAllocInfo;
@@ -654,7 +612,7 @@ void App::InitParticleData(std::array<glm::vec2, PARTICLE_NUM> initParticlePosit
 	copyCommandBufferAllocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 	copyCommandBufferAllocInfo.commandBufferCount = 1;
 
-	VK_CHECK(vkAllocateCommandBuffers(m_Device->GetLogicalDeviceHandle(), &copyCommandBufferAllocInfo, &copyCommandBufferHandle));
+	VK_CHECK(vkAllocateCommandBuffers(VK::GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), &copyCommandBufferAllocInfo, &copyCommandBufferHandle));
 
 	VkCommandBufferBeginInfo commandBufferBeginInfo;
 	commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -684,10 +642,10 @@ void App::InitParticleData(std::array<glm::vec2, PARTICLE_NUM> initParticlePosit
 	copySubmitInfo.signalSemaphoreCount = 0;
 	copySubmitInfo.pSignalSemaphores = nullptr;
 
-	m_Device->GetComputeQueue()->Submit(1, &copySubmitInfo);
-	m_Device->GetComputeQueue()->WaitIdle();
+	VK::GraphicsContext::GetDevice()->GetComputeQueue()->Submit(1, &copySubmitInfo);
+	VK::GraphicsContext::GetDevice()->GetComputeQueue()->WaitIdle();
 
-	vkFreeCommandBuffers(m_Device->GetLogicalDeviceHandle(), m_ComputeCommandPool->GetVKCommandPoolHandle(), 1, &copyCommandBufferHandle);
-	vkFreeMemory(m_Device->GetLogicalDeviceHandle(), stagingBufferDeviceMemoryHandle, nullptr);
-	vkDestroyBuffer(m_Device->GetLogicalDeviceHandle(), stagingBufferHandle, nullptr);
+	vkFreeCommandBuffers(VK::GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), m_ComputeCommandPool->GetVKCommandPoolHandle(), 1, &copyCommandBufferHandle);
+	vkFreeMemory(VK::GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), stagingBufferDeviceMemoryHandle, nullptr);
+	vkDestroyBuffer(VK::GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), stagingBufferHandle, nullptr);
 }

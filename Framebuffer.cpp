@@ -1,15 +1,15 @@
 #include "Framebuffer.h"
 #include "Utils.h"
 #include <iostream>
-#include "Device.h"
+#include "GraphicsContext.h"
 namespace VK
 {
-    Framebuffer::Framebuffer(const Device *device,
+    Framebuffer::Framebuffer(
                              const VkRenderPass &renderPass,
                              const std::vector<VkImageView> &attachments,
                              uint32_t width,
                              uint32_t height)
-        : m_TmpDevice(device)
+        
     {
         VkFramebufferCreateInfo info;
         info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -22,11 +22,11 @@ namespace VK
         info.height = height;
         info.layers = 1;
 
-        VK_CHECK(vkCreateFramebuffer(m_TmpDevice->GetLogicalDeviceHandle(), &info, nullptr, &m_FramebufferHandle));
+        VK_CHECK(vkCreateFramebuffer(GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), &info, nullptr, &m_FramebufferHandle));
     }
     Framebuffer::~Framebuffer()
     {
-        vkDestroyFramebuffer(m_TmpDevice->GetLogicalDeviceHandle(), m_FramebufferHandle, nullptr);
+        vkDestroyFramebuffer(GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), m_FramebufferHandle, nullptr);
     }
     const VkFramebuffer &Framebuffer::GetVKFramebufferHandle() const
     {

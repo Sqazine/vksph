@@ -9,7 +9,7 @@ namespace VK
     class SwapChain
     {
     public:
-        SwapChain(SDL_Window *window, const Instance *instance, const Device *device);
+        SwapChain();
         ~SwapChain();
 
         const VkSwapchainKHR &GetVKSwapChainHandle() const;
@@ -25,8 +25,6 @@ namespace VK
         std::vector<VkImageView> m_SwapChainImageViews;
         VkFormat m_SwapChainImageFormat;
         VkExtent2D m_SwapChainExtent;
-
-        const Device *m_TmpDevice;
     };
 
 }

@@ -1,11 +1,12 @@
 #include "Queue.h"
-#include "Device.h"
+#include "GraphicsContext.h"
 #include <iostream>
 #include "Utils.h"
 #include "Fence.h"
+#include "Device.h"
 namespace VK
 {
-    Queue::Queue(const Device *device, uint32_t queueFamilyIndex, uint32_t queueIndex)
+    Queue::Queue(const Device* device, uint32_t queueFamilyIndex, uint32_t queueIndex)
     {
         vkGetDeviceQueue(device->GetLogicalDeviceHandle(), queueFamilyIndex, queueIndex, &m_QueueHandle);
     }

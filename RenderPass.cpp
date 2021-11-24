@@ -1,14 +1,14 @@
 #include "RenderPass.h"
-#include "Device.h"
 #include "SwapChain.h"
 #include "Utils.h"
 #include <iostream>
+#include "GraphicsContext.h"
 
 namespace VK
 {
 
-   RenderPass::RenderPass(const Device *device, const SwapChain *swapChain)
-       : m_TmpDevice(device)
+   RenderPass::RenderPass( const SwapChain *swapChain)
+       
    {
       VkAttachmentDescription colorAttachment{};
       colorAttachment.format = swapChain->GetVKSwapChainImageFormat();
@@ -36,11 +36,11 @@ namespace VK
       renderPassInfo.subpassCount = 1;
       renderPassInfo.pSubpasses = &subpass;
 
-      VK_CHECK(vkCreateRenderPass(m_TmpDevice->GetLogicalDeviceHandle(), &renderPassInfo, nullptr, &m_RenderPassHandle));
+      VK_CHECK(vkCreateRenderPass(GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), &renderPassInfo, nullptr, &m_RenderPassHandle));
    }
    RenderPass::~RenderPass()
    {
-      vkDestroyRenderPass(m_TmpDevice->GetLogicalDeviceHandle(), m_RenderPassHandle, nullptr);
+      vkDestroyRenderPass(GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), m_RenderPassHandle, nullptr);
    }
 
    const VkRenderPass &RenderPass::GetVKRenderPassHandle() const

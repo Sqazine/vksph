@@ -1,12 +1,11 @@
 #include "DescriptorPool.h"
 #include <iostream>
 #include "Utils.h"
-#include "Device.h"
+#include "GraphicsContext.h"
 namespace VK
 {
 
-    DescriptorPool::DescriptorPool(const Device* device, uint32_t descriptorCount)
-        : m_TmpDevice(device)
+    DescriptorPool::DescriptorPool( uint32_t descriptorCount) 
     {
         VkDescriptorPoolSize poolSize = {};
         poolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -20,11 +19,11 @@ namespace VK
         poolInfo.poolSizeCount = 1;
         poolInfo.pPoolSizes = &poolSize;
 
-        VK_CHECK(vkCreateDescriptorPool(m_TmpDevice->GetLogicalDeviceHandle(), &poolInfo, nullptr, &m_DescriptorPoolHandle));
+        VK_CHECK(vkCreateDescriptorPool(GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), &poolInfo, nullptr, &m_DescriptorPoolHandle));
     }
     DescriptorPool::~DescriptorPool()
     {
-        vkDestroyDescriptorPool(m_TmpDevice->GetLogicalDeviceHandle(), m_DescriptorPoolHandle, nullptr);
+        vkDestroyDescriptorPool(GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), m_DescriptorPoolHandle, nullptr);
     }
 
     const VkDescriptorPool &DescriptorPool::GetVKDescriptorPoolHandle() const

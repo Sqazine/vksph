@@ -3,11 +3,11 @@
 #include <fstream>
 #include <sstream>
 #include "Utils.h"
-#include "Device.h"
+#include "GraphicsContext.h"
 namespace VK
 {
-    Shader::Shader(const Device *device, VkShaderStageFlagBits stageFlag, std::string_view filePath)
-        : m_TmpDevice(device)
+    Shader::Shader( VkShaderStageFlagBits stageFlag, std::string_view filePath)
+        
     {
         std::ifstream file(filePath.data(), std::ios::binary);
         if (!file.is_open())
@@ -27,7 +27,7 @@ namespace VK
         info.codeSize = content.size();
         info.pCode = reinterpret_cast<const uint32_t *>(content.data());
 
-        VK_CHECK(vkCreateShaderModule(m_TmpDevice->GetLogicalDeviceHandle(), &info, nullptr, &m_ShaderModuleHandle));
+        VK_CHECK(vkCreateShaderModule(GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), &info, nullptr, &m_ShaderModuleHandle));
 
         m_StageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         m_StageCreateInfo.pNext = nullptr;
@@ -39,7 +39,7 @@ namespace VK
     }
     Shader::~Shader()
     {
-        vkDestroyShaderModule(m_TmpDevice->GetLogicalDeviceHandle(), m_ShaderModuleHandle, nullptr);
+        vkDestroyShaderModule(GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), m_ShaderModuleHandle, nullptr);
     }
 
     const VkPipelineShaderStageCreateInfo &Shader::GetStageCreateInfo() const

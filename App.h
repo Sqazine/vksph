@@ -26,7 +26,7 @@
 #include "ComputePipeline.h"
 #include "GraphicsPipeline.h"
 #include "Fence.h"
-
+#include "GraphicsCOntext.h"
 #define PARTICLE_NUM 20000
 #define PARTICLE_RADIUS 0.005f
 #define WORK_GROUP_SIZE 128
@@ -34,16 +34,11 @@
 
 #define MAX_FRAMES_IN_FLIGHT 2
 
-const std::vector<const char *> validationLayers = {
-	"VK_LAYER_KHRONOS_validation"};
-
-const std::vector<const char *> deviceExtensions = {
-	VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
 class App
 {
 public:
-	App(std::string title, int32_t width, int32_t height);
+	App(const WindowCreateInfo& windowInfo);
 	~App();
 
 	void Run();
@@ -55,21 +50,13 @@ private:
 	void Draw();
 	void SubmitAndPresent();
 
-	void CreateWindow(std::string title, int32_t width, int32_t height);
-	void LoadVulkanLib();
-
 	void InitParticleData(std::array<glm::vec2, PARTICLE_NUM> initParticlePosition);
 
 	void UpdateComputeDescriptorSets();
 
 	bool m_IsRunning;
+	WindowCreateInfo m_WinInfo;
 
-	std::string m_WindowTitle;
-	int32_t m_WindowWidth, m_WindowHeight;
-	SDL_Window *m_WindowHandle;
-
-	std::unique_ptr<VK::Instance> m_Instance;
-	std::unique_ptr<VK::Device> m_Device;
 	std::unique_ptr<VK::SwapChain> m_SwapChain;
 	std::unique_ptr<VK::RenderPass> m_RenderPass;
 	std::vector<std::unique_ptr<VK::Framebuffer>> m_SwapChainFrameBuffers;
@@ -99,8 +86,6 @@ private:
 	VkCommandBuffer m_ComputeCommandBufferHandle;
 
 	VkPipelineStageFlags waitDstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-
-	VK::DeletionQueue m_DeletionQueue;
 
 	const uint64_t m_PosSsboSize = sizeof(glm::vec2) * PARTICLE_NUM;
 	const uint64_t m_VelocitySsboSize = sizeof(glm::vec2) * PARTICLE_NUM;

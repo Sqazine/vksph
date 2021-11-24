@@ -1,12 +1,11 @@
 #include "CommandPool.h"
 #include "Utils.h"
 #include <iostream>
-#include "Device.h"
+#include "GraphicsContext.h"
 namespace VK
 {
 
-    CommandPool::CommandPool(const Device *device, uint32_t queueFamilyIndex)
-        : m_TmpDevice(device)
+    CommandPool::CommandPool( uint32_t queueFamilyIndex)
     {
         VkCommandPoolCreateInfo info{};
         info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -14,12 +13,12 @@ namespace VK
         info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         info.queueFamilyIndex = queueFamilyIndex;
 
-        VK_CHECK(vkCreateCommandPool(m_TmpDevice->GetLogicalDeviceHandle(), &info, nullptr, &m_CommandPoolHandle));
+        VK_CHECK(vkCreateCommandPool(GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), &info, nullptr, &m_CommandPoolHandle));
     }
     CommandPool::~CommandPool()
     {
         m_DeletionQueue.Flush();
-        vkDestroyCommandPool(m_TmpDevice->GetLogicalDeviceHandle(), m_CommandPoolHandle, nullptr);
+        vkDestroyCommandPool(GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), m_CommandPoolHandle, nullptr);
     }
 
     const VkCommandPool &CommandPool::GetVKCommandPoolHandle() const
@@ -38,10 +37,10 @@ namespace VK
 
         VkCommandBuffer commandBufferHandle;
 
-        VK_CHECK(vkAllocateCommandBuffers(m_TmpDevice->GetLogicalDeviceHandle(), &allocInfo, &commandBufferHandle));
+        VK_CHECK(vkAllocateCommandBuffers(GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), &allocInfo, &commandBufferHandle));
 
         m_DeletionQueue.Add([=]()
-                            { vkFreeCommandBuffers(m_TmpDevice->GetLogicalDeviceHandle(), m_CommandPoolHandle, 1, &commandBufferHandle); });
+                            { vkFreeCommandBuffers(GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), m_CommandPoolHandle, 1, &commandBufferHandle); });
 
         return commandBufferHandle;
     }
@@ -57,10 +56,10 @@ namespace VK
 
         std::vector<VkCommandBuffer> commandBufferHandles(count);
 
-        VK_CHECK(vkAllocateCommandBuffers(m_TmpDevice->GetLogicalDeviceHandle(), &bufferAllocInfo, commandBufferHandles.data()));
+        VK_CHECK(vkAllocateCommandBuffers(GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), &bufferAllocInfo, commandBufferHandles.data()));
 
         m_DeletionQueue.Add([=]()
-                            { vkFreeCommandBuffers(m_TmpDevice->GetLogicalDeviceHandle(), m_CommandPoolHandle, commandBufferHandles.size(), commandBufferHandles.data()); });
+                            { vkFreeCommandBuffers(GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), m_CommandPoolHandle, commandBufferHandles.size(), commandBufferHandles.data()); });
 
         return commandBufferHandles;
     }

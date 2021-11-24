@@ -5,10 +5,11 @@
 #include "PipelineCache.h"
 #include "Utils.h"
 #include <iostream>
+#include "GraphicsContext.h"
 namespace VK
 {
-    ComputePipeline::ComputePipeline(const Device *device, const Shader *shader, const PipelineLayout *layout, const PipelineCache *pipelineCache)
-        : m_TmpDevice(device)
+    ComputePipeline::ComputePipeline( const Shader *shader, const PipelineLayout *layout, const PipelineCache *pipelineCache)
+        
     {
         VkComputePipelineCreateInfo pipelineInfo{};
         pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
@@ -19,7 +20,7 @@ namespace VK
         pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
         pipelineInfo.basePipelineIndex = -1;
 
-        VK_CHECK(vkCreateComputePipelines(m_TmpDevice->GetLogicalDeviceHandle(),
+        VK_CHECK(vkCreateComputePipelines(GraphicsContext::GetDevice()->GetLogicalDeviceHandle(),
                                           pipelineCache == nullptr ? nullptr : pipelineCache->GetVKPipelineCacheHandle(),
                                           1,
                                           &pipelineInfo,
@@ -28,7 +29,7 @@ namespace VK
     }
     ComputePipeline::~ComputePipeline()
     {
-        vkDestroyPipeline(m_TmpDevice->GetLogicalDeviceHandle(), m_PipelineHandle, nullptr);
+        vkDestroyPipeline(GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), m_PipelineHandle, nullptr);
     }
 
     const VkPipeline &ComputePipeline::GetVKPipelineHandle() const

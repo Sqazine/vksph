@@ -5,7 +5,7 @@ namespace VK
     class RenderPass
     {
     public:
-        RenderPass(const class Device *device, const class SwapChain *swapChain);
+        RenderPass( const class SwapChain *swapChain);
         ~RenderPass();
 
         const VkRenderPass &GetVKRenderPassHandle() const;
@@ -13,6 +13,6 @@ namespace VK
     private:
         VkRenderPass m_RenderPassHandle;
 
-        const class Device *m_TmpDevice;
+        
     };
 }

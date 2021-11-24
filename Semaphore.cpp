@@ -1,22 +1,22 @@
 #include "Semaphore.h"
 #include <iostream>
 #include "Utils.h"
-#include "Device.h"
+#include "GraphicsContext.h"
 namespace VK
 {
-    Semaphore::Semaphore(const Device *device)
-        : m_TmpDevice(device)
+    Semaphore::Semaphore()
+        
     {
         VkSemaphoreCreateInfo info = {};
         info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
         info.pNext = nullptr;
         info.flags = 0;
 
-        VK_CHECK(vkCreateSemaphore(m_TmpDevice->GetLogicalDeviceHandle(), &info, nullptr, &m_SemaphoreHandle));
+        VK_CHECK(vkCreateSemaphore(GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), &info, nullptr, &m_SemaphoreHandle));
     }
     Semaphore::~Semaphore()
     {
-        vkDestroySemaphore(m_TmpDevice->GetLogicalDeviceHandle(), m_SemaphoreHandle, nullptr);
+        vkDestroySemaphore(GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), m_SemaphoreHandle, nullptr);
     }
 
     const VkSemaphore &Semaphore::GetVKSemaphoreHandle() const

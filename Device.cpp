@@ -1,13 +1,14 @@
 #include "Device.h"
 #include <iostream>
+#include "GraphicsContext.h"
 namespace VK
 {
-    Device::Device(const Instance *instance, std::vector<const char *> neededDeviceExtensions)
-        : m_TmpInstanceHandle(instance), m_NeededDeviceExtensions(neededDeviceExtensions)
+    Device::Device(std::vector<const char *> neededDeviceExtensions)
+        : m_NeededDeviceExtensions(neededDeviceExtensions)
     {
         m_PhysicalDeviceHandle = SelectPhysicalDevice();
 
-        m_QueueIndices = FindQueueFamilies(m_PhysicalDeviceHandle, m_TmpInstanceHandle->GetVKSurfaceKHRHandle());
+        m_QueueIndices = FindQueueFamilies(m_PhysicalDeviceHandle, GraphicsContext::GetInstance()->GetVKSurfaceKHRHandle());
 
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
 
@@ -47,8 +48,8 @@ namespace VK
         deviceCreateInfo.enabledExtensionCount = m_NeededDeviceExtensions.size();
         deviceCreateInfo.ppEnabledExtensionNames = m_NeededDeviceExtensions.data();
 #if _DEBUG
-        deviceCreateInfo.enabledLayerCount = m_TmpInstanceHandle->GetNeededValidationLayers().size();
-        deviceCreateInfo.ppEnabledLayerNames = m_TmpInstanceHandle->GetNeededValidationLayers().data();
+        deviceCreateInfo.enabledLayerCount = GraphicsContext::GetInstance()->GetNeededValidationLayers().size();
+        deviceCreateInfo.ppEnabledLayerNames = GraphicsContext::GetInstance()->GetNeededValidationLayers().data();
 #endif
         deviceCreateInfo.pEnabledFeatures = nullptr;
         deviceCreateInfo.queueCreateInfoCount = queueCreateInfos.size();
@@ -56,9 +57,9 @@ namespace VK
 
         VK_CHECK(vkCreateDevice(m_PhysicalDeviceHandle, &deviceCreateInfo, nullptr, &m_LogicalDeviceHandle));
 
-        m_GraphicsQueue = std::make_unique<Queue>(this, m_QueueIndices.graphicsFamily.value(), 0);
-        m_PresentQueue = std::make_unique<Queue>(this, m_QueueIndices.presentFamily.value(), 0);
-        m_ComputeQueue = std::make_unique<Queue>(this, m_QueueIndices.computeFamily.value(), 0);
+        m_GraphicsQueue = std::make_unique<Queue>(this,m_QueueIndices.graphicsFamily.value(), 0);
+        m_PresentQueue = std::make_unique<Queue>(this,m_QueueIndices.presentFamily.value(), 0);
+        m_ComputeQueue = std::make_unique<Queue>(this,m_QueueIndices.computeFamily.value(), 0);
     }
     Device::~Device()
     {
@@ -115,11 +116,11 @@ namespace VK
         VkPhysicalDevice result;
 
         uint32_t physicalDeviceCount = 0;
-        vkEnumeratePhysicalDevices(m_TmpInstanceHandle->GetVKInstanceHandle(), &physicalDeviceCount, nullptr);
+        vkEnumeratePhysicalDevices(GraphicsContext::GetInstance()->GetVKInstanceHandle(), &physicalDeviceCount, nullptr);
         if (physicalDeviceCount == 0)
             std::cout << "No GPU support vulkan" << std::endl;
         std::vector<VkPhysicalDevice> physicalDevices(physicalDeviceCount);
-        vkEnumeratePhysicalDevices(m_TmpInstanceHandle->GetVKInstanceHandle(), &physicalDeviceCount, physicalDevices.data());
+        vkEnumeratePhysicalDevices(GraphicsContext::GetInstance()->GetVKInstanceHandle(), &physicalDeviceCount, physicalDevices.data());
 
         for (auto phyDev : physicalDevices)
         {
@@ -128,7 +129,7 @@ namespace VK
 
             bool extSatisfied = CheckExtensionSupport(m_NeededDeviceExtensions, phyDevExtensions);
 
-            if (extSatisfied && FindQueueFamilies(phyDev, m_TmpInstanceHandle->GetVKSurfaceKHRHandle()).IsComplete())
+            if (extSatisfied && FindQueueFamilies(phyDev, GraphicsContext::GetInstance()->GetVKSurfaceKHRHandle()).IsComplete())
                 result = phyDev;
             VkPhysicalDeviceProperties props = GetPhysicalDeviceProps(result);
             if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)

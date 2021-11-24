@@ -6,7 +6,7 @@ namespace VK
     class GraphicsPipeline
     {
     public:
-        GraphicsPipeline(const class Device *device,
+        GraphicsPipeline(
                          std::vector<VkPipelineShaderStageCreateInfo> shaderStageCreateInfos,
                          const VkPipelineVertexInputStateCreateInfo *pVertexInputState,
                          const VkPipelineInputAssemblyStateCreateInfo *pInputAssemblyState,
@@ -26,6 +26,6 @@ namespace VK
 
     private:
         VkPipeline m_PipelineHandle;
-        const class Device *m_TmpDevice;
+        
     };
 }

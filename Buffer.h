@@ -6,14 +6,12 @@ namespace VK
     class Buffer
     {
     public:
-        Buffer(const class Device *device,
-               VkDeviceSize size,
+        Buffer(VkDeviceSize size,
                VkBufferUsageFlags usage,
                VkSharingMode sharingMode,
                VkMemoryPropertyFlags properties);
-
-        Buffer(const class Device *device,
-               VkDeviceSize size,
+               
+        Buffer(VkDeviceSize size,
                VkBufferUsageFlags usage,
                VkSharingMode sharingMode,
                VkMemoryAllocateFlags allocateFlags,
@@ -29,6 +27,5 @@ namespace VK
 
         VkBuffer m_BufferHandle;
         VkDeviceMemory m_BufferMemoryHandle;
-        const class Device *m_TmpDevice;
     };
 }

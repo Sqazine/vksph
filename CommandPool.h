@@ -7,7 +7,7 @@ namespace VK
     class CommandPool
     {
     public:
-        CommandPool(const class Device *device, uint32_t queueFamilyIndex);
+        CommandPool(uint32_t queueFamilyIndex);
         ~CommandPool();
 
         const VkCommandPool &GetVKCommandPoolHandle() const;
@@ -20,8 +20,6 @@ namespace VK
         VkCommandPool m_CommandPoolHandle;
 
         DeletionQueue m_DeletionQueue;
-
-        const class Device *m_TmpDevice;
     };
 
 }

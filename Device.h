@@ -11,7 +11,7 @@ namespace VK
     class Device
     {
     public:
-        Device(const Instance *instance, std::vector<const char *> neededDeviceExtensions);
+        Device(std::vector<const char *> neededDeviceExtensions);
         ~Device();
 
         void WaitIdle();
@@ -37,7 +37,6 @@ namespace VK
         std::unique_ptr<Queue> m_PresentQueue;
         std::unique_ptr<Queue> m_ComputeQueue;
 
-        const Instance *m_TmpInstanceHandle;
         std::vector<const char *> m_NeededDeviceExtensions;
     };
 }

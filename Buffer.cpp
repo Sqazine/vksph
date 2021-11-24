@@ -2,24 +2,24 @@
 #include "Utils.h"
 #include "Device.h"
 #include <iostream>
+#include "GraphicsContext.h"
 namespace VK
 {
-    Buffer::Buffer(const Device *device,
+    Buffer::Buffer(
                    VkDeviceSize size,
                    VkBufferUsageFlags usage,
                    VkSharingMode sharingMode,
                    VkMemoryPropertyFlags properties)
-        : Buffer(device, size, usage, sharingMode, 0, properties)
+        : Buffer(size, usage, sharingMode, 0, properties)
     {
     }
 
-    Buffer::Buffer(const Device *device,
+    Buffer::Buffer(
                    VkDeviceSize size,
                    VkBufferUsageFlags usage,
                    VkSharingMode sharingMode,
                    VkMemoryAllocateFlags allocateFlags,
                    VkMemoryPropertyFlags properties)
-        : m_TmpDevice(device)
     {
         VkBufferCreateInfo bufferInfo;
         bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -29,7 +29,7 @@ namespace VK
         bufferInfo.usage = usage;
         bufferInfo.sharingMode = sharingMode;
 
-        VK_CHECK(vkCreateBuffer(m_TmpDevice->GetLogicalDeviceHandle(), &bufferInfo, nullptr, &m_BufferHandle));
+        VK_CHECK(vkCreateBuffer(GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), &bufferInfo, nullptr, &m_BufferHandle));
 
         VkMemoryRequirements memRequirements;
         memRequirements = GetMemoryRequirements();
@@ -43,23 +43,23 @@ namespace VK
         VkMemoryAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
         allocInfo.allocationSize = memRequirements.size;
-        allocInfo.memoryTypeIndex = m_TmpDevice->FindMemoryType(memRequirements.memoryTypeBits, properties);
+        allocInfo.memoryTypeIndex = GraphicsContext::GetDevice()->FindMemoryType(memRequirements.memoryTypeBits, properties);
         allocInfo.pNext = &flagsInfo;
 
-        VK_CHECK(vkAllocateMemory(m_TmpDevice->GetLogicalDeviceHandle(), &allocInfo, nullptr, &m_BufferMemoryHandle));
+        VK_CHECK(vkAllocateMemory(GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), &allocInfo, nullptr, &m_BufferMemoryHandle));
 
-        vkBindBufferMemory(m_TmpDevice->GetLogicalDeviceHandle(), m_BufferHandle, m_BufferMemoryHandle, 0);
+        vkBindBufferMemory(GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), m_BufferHandle, m_BufferMemoryHandle, 0);
     }
     Buffer::~Buffer()
     {
-        vkFreeMemory(m_TmpDevice->GetLogicalDeviceHandle(), m_BufferMemoryHandle, nullptr);
-        vkDestroyBuffer(m_TmpDevice->GetLogicalDeviceHandle(), m_BufferHandle, nullptr);
+        vkFreeMemory(GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), m_BufferMemoryHandle, nullptr);
+        vkDestroyBuffer(GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), m_BufferHandle, nullptr);
     }
 
     VkMemoryRequirements Buffer::GetMemoryRequirements() const
     {
         VkMemoryRequirements memRequirements;
-        vkGetBufferMemoryRequirements(m_TmpDevice->GetLogicalDeviceHandle(), m_BufferHandle, &memRequirements);
+        vkGetBufferMemoryRequirements(GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), m_BufferHandle, &memRequirements);
         return memRequirements;
     }
 
