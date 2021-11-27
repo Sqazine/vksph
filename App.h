@@ -26,7 +26,7 @@
 #include "ComputePipeline.h"
 #include "GraphicsPipeline.h"
 #include "Fence.h"
-#include "GraphicsCOntext.h"
+#include "GraphicsContext.h"
 #define PARTICLE_NUM 20000
 #define PARTICLE_RADIUS 0.005f
 #define WORK_GROUP_SIZE 128

@@ -59,7 +59,11 @@ void App::Init()
 			m_SwapChain->GetVKSwapChainExtent().height));
 	}
 
-	m_GlobalDescriptorPool = std::make_unique<VK::DescriptorPool>(5);
+	       VkDescriptorPoolSize poolSize = {};
+        poolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        poolSize.descriptorCount = 5;
+
+	m_GlobalDescriptorPool = std::make_unique<VK::DescriptorPool>(poolSize);
 
 	m_GlobalPipelineCache = std::make_unique<VK::PipelineCache>();
 
