@@ -99,6 +99,4 @@ private:
 	const uint64_t m_ForceSsboOffset = m_VelocitySsboOffset + m_VelocitySsboSize;
 	const uint64_t m_DensitySsboOffset = m_ForceSsboOffset + m_ForceSsboSize;
 	const uint64_t m_PressureSsboOffset = m_DensitySsboOffset + m_DensitySsboSize;
-
-	glm::ivec2 m_SpawnPos;
 };
