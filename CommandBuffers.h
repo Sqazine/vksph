@@ -13,6 +13,7 @@ namespace VK
         const std::vector<VkCommandBuffer>& GetVKCommandBuffers() const;
 
         VkCommandBuffer Begin(size_t i);
+        void End(VkCommandBuffer commandBuffer);
     private:
         std::vector<VkCommandBuffer> m_CommandBuffers;
         const CommandPool* m_TmpCommandPool;

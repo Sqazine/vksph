@@ -43,8 +43,13 @@ namespace VK
         info.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
         info.pInheritanceInfo = nullptr;
 
-        vkBeginCommandBuffer(m_CommandBuffers[i], &info);
+        VK_CHECK(vkBeginCommandBuffer(m_CommandBuffers[i], &info));
 
         return m_CommandBuffers[i];
+    }
+
+    void CommandBuffers::End(VkCommandBuffer commandBuffer)
+    {
+        VK_CHECK(vkEndCommandBuffer(commandBuffer));
     }
 }

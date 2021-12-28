@@ -378,7 +378,7 @@ void App::Simulate()
 	vkCmdDispatch(commandBuffer, WORK_GROUP_NUM, 1, 1);
 	vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 0, nullptr);
 
-	VK_CHECK(vkEndCommandBuffer(commandBuffer));
+	m_ComputeCommandBuffers->End(commandBuffer);
 }
 
 void App::Draw()
@@ -420,7 +420,7 @@ void App::Draw()
 		vkCmdDraw(commandBuffer, PARTICLE_NUM, 1, 0, 0);
 		vkCmdEndRenderPass(commandBuffer);
 
-		VK_CHECK(vkEndCommandBuffer(commandBuffer));
+		m_GraphicsCommandBuffers->End(commandBuffer);
 	}
 }
 
@@ -560,70 +560,25 @@ void App::UpdateComputeDescriptorSets()
 
 void App::InitParticleData(std::array<glm::vec2, PARTICLE_NUM> initParticlePosition)
 {
-	VkBuffer stagingBufferHandle = VK_NULL_HANDLE;
-	VkDeviceMemory stagingBufferDeviceMemoryHandle = VK_NULL_HANDLE;
-
-	VkBufferCreateInfo stagingBufferCreateInfo{};
-	stagingBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	stagingBufferCreateInfo.pNext = nullptr;
-	stagingBufferCreateInfo.flags = 0;
-	stagingBufferCreateInfo.size = m_PackedBufferSize;
-	stagingBufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+	VkSharingMode sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	if (!VK::GraphicsContext::GetDevice()->GetQueueIndices().IsSameFamily())
-		stagingBufferCreateInfo.sharingMode = VK_SHARING_MODE_CONCURRENT;
-	else
-		stagingBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	stagingBufferCreateInfo.queueFamilyIndexCount = 0;
-	stagingBufferCreateInfo.pQueueFamilyIndices = nullptr;
+		sharingMode = VK_SHARING_MODE_CONCURRENT;
 
-	vkCreateBuffer(VK::GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), &stagingBufferCreateInfo, nullptr, &stagingBufferHandle);
+	VK::Buffer stagingBuffer = VK::Buffer(m_PackedBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, sharingMode, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	stagingBuffer.Fill(m_PosSsboSize, initParticlePosition.data());
 
-	VkMemoryRequirements stagingBufferMemoryRequirements;
-	vkGetBufferMemoryRequirements(VK::GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), stagingBufferHandle, &stagingBufferMemoryRequirements);
+	VK::CommandBuffers copyCommandBuffers = VK::CommandBuffers(m_ComputeCommandPool.get(), 1);
 
-	VkMemoryAllocateInfo stagingBufferMemoryAllocInfo;
-	stagingBufferMemoryAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	stagingBufferMemoryAllocInfo.pNext = nullptr;
-	stagingBufferMemoryAllocInfo.allocationSize = stagingBufferMemoryRequirements.size;
-	stagingBufferMemoryAllocInfo.memoryTypeIndex = VK::GraphicsContext::GetDevice()->FindMemoryType(stagingBufferMemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-	VK_CHECK(vkAllocateMemory(VK::GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), &stagingBufferMemoryAllocInfo, nullptr, &stagingBufferDeviceMemoryHandle));
-
-	vkBindBufferMemory(VK::GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), stagingBufferHandle, stagingBufferDeviceMemoryHandle, 0);
-
-	void *mappedMemory = nullptr;
-	vkMapMemory(VK::GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), stagingBufferDeviceMemoryHandle, 0, stagingBufferMemoryRequirements.size, 0, &mappedMemory);
-
-	std::memset(mappedMemory, 0, m_PackedBufferSize);
-	std::memcpy(mappedMemory, initParticlePosition.data(), m_PosSsboSize);
-	vkUnmapMemory(VK::GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), stagingBufferDeviceMemoryHandle);
-
-	VkCommandBuffer copyCommandBufferHandle;
-	VkCommandBufferAllocateInfo copyCommandBufferAllocInfo;
-	copyCommandBufferAllocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-	copyCommandBufferAllocInfo.pNext = nullptr;
-	copyCommandBufferAllocInfo.commandPool = m_ComputeCommandPool->GetVKCommandPoolHandle();
-	copyCommandBufferAllocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	copyCommandBufferAllocInfo.commandBufferCount = 1;
-
-	VK_CHECK(vkAllocateCommandBuffers(VK::GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), &copyCommandBufferAllocInfo, &copyCommandBufferHandle));
-
-	VkCommandBufferBeginInfo commandBufferBeginInfo;
-	commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	commandBufferBeginInfo.pNext = nullptr;
-	commandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
-	commandBufferBeginInfo.pInheritanceInfo = nullptr;
-
-	VK_CHECK(vkBeginCommandBuffer(copyCommandBufferHandle, &commandBufferBeginInfo));
+	VkCommandBuffer commandBuffer = copyCommandBuffers.Begin(0);
 
 	VkBufferCopy bufferCopyRegion;
 	bufferCopyRegion.srcOffset = 0;
 	bufferCopyRegion.dstOffset = 0;
-	bufferCopyRegion.size = stagingBufferMemoryRequirements.size;
+	bufferCopyRegion.size = stagingBuffer.GetVKBufferSize();
 
-	vkCmdCopyBuffer(copyCommandBufferHandle, stagingBufferHandle, m_PackedParticlesBuffer->GetVKBufferHandle(), 1, &bufferCopyRegion);
+	m_PackedParticlesBuffer->CopyFrom(commandBuffer, bufferCopyRegion, stagingBuffer);
 
-	VK_CHECK(vkEndCommandBuffer(copyCommandBufferHandle));
+	copyCommandBuffers.End(commandBuffer);
 
 	VkSubmitInfo copySubmitInfo;
 	copySubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -632,14 +587,10 @@ void App::InitParticleData(std::array<glm::vec2, PARTICLE_NUM> initParticlePosit
 	copySubmitInfo.pWaitSemaphores = nullptr;
 	copySubmitInfo.pWaitDstStageMask = 0;
 	copySubmitInfo.commandBufferCount = 1;
-	copySubmitInfo.pCommandBuffers = &copyCommandBufferHandle;
+	copySubmitInfo.pCommandBuffers = &commandBuffer;
 	copySubmitInfo.signalSemaphoreCount = 0;
 	copySubmitInfo.pSignalSemaphores = nullptr;
 
 	VK::GraphicsContext::GetDevice()->GetComputeQueue()->Submit(1, &copySubmitInfo);
 	VK::GraphicsContext::GetDevice()->GetComputeQueue()->WaitIdle();
-
-	vkFreeCommandBuffers(VK::GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), m_ComputeCommandPool->GetVKCommandPoolHandle(), 1, &copyCommandBufferHandle);
-	vkFreeMemory(VK::GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), stagingBufferDeviceMemoryHandle, nullptr);
-	vkDestroyBuffer(VK::GraphicsContext::GetDevice()->GetLogicalDeviceHandle(), stagingBufferHandle, nullptr);
 }
