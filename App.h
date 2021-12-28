@@ -27,6 +27,7 @@
 #include "GraphicsPipeline.h"
 #include "Fence.h"
 #include "GraphicsContext.h"
+#include "CommandBuffers.h"
 #define PARTICLE_NUM 20000
 #define PARTICLE_RADIUS 0.005f
 #define WORK_GROUP_SIZE 128
@@ -69,7 +70,7 @@ private:
 	std::unique_ptr<VK::GraphicsPipeline> m_GraphicsPipeline;
 
 	std::unique_ptr<VK::CommandPool> m_GraphicsCommandPool;
-	std::vector<VkCommandBuffer> m_GraphicsCommandBufferHandles;
+	std::unique_ptr<VK::CommandBuffers> m_GraphicsCommandBuffers;
 
 	std::vector<std::unique_ptr<VK::Semaphore>> m_ImageAvailableSemaphores;
 	std::vector<std::unique_ptr<VK::Semaphore>> m_RenderFinishedSemaphores;
@@ -83,9 +84,7 @@ private:
 	 std::array<std::unique_ptr<VK::ComputePipeline>,3> m_ComputePipelines;
 
 	std::unique_ptr<VK::CommandPool> m_ComputeCommandPool;
-	VkCommandBuffer m_ComputeCommandBufferHandle;
-
-	VkPipelineStageFlags waitDstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	std::unique_ptr<VK::CommandBuffers> m_ComputeCommandBuffers;
 
 	const uint64_t m_PosSsboSize = sizeof(glm::vec2) * PARTICLE_NUM;
 	const uint64_t m_VelocitySsboSize = sizeof(glm::vec2) * PARTICLE_NUM;

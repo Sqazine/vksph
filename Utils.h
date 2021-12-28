@@ -22,25 +22,6 @@ namespace VK
 			abort();                                              \
 		}                                                         \
 	} while (0);
-
-	struct DeletionQueue
-	{
-		std::deque<std::function<void()>> deletors;
-
-		void Add(std::function<void()> &&function)
-		{
-			deletors.emplace_back(function);
-		}
-
-		void Flush()
-		{
-			for (auto it = deletors.rbegin(); it != deletors.rend(); ++it)
-				(*it)();
-
-			deletors.clear();
-		}
-	};
-
 	struct QueueFamilyIndices
 	{
 		std::optional<uint32_t> graphicsFamily;

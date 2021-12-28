@@ -59,9 +59,9 @@ void App::Init()
 			m_SwapChain->GetVKSwapChainExtent().height));
 	}
 
-	       VkDescriptorPoolSize poolSize = {};
-        poolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        poolSize.descriptorCount = 5;
+	VkDescriptorPoolSize poolSize = {};
+	poolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	poolSize.descriptorCount = 5;
 
 	m_GlobalDescriptorPool = std::make_unique<VK::DescriptorPool>(poolSize);
 
@@ -189,7 +189,7 @@ void App::Init()
 		m_GlobalPipelineCache.get());
 
 	m_GraphicsCommandPool = std::make_unique<VK::CommandPool>(VK::GraphicsContext::GetDevice()->GetQueueIndices().graphicsFamily.value());
-	m_GraphicsCommandBufferHandles = m_GraphicsCommandPool->AllocateCommandBuffers(m_SwapChainFrameBuffers.size(), VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+	m_GraphicsCommandBuffers = std::make_unique<VK::CommandBuffers>(m_GraphicsCommandPool.get(), m_SwapChainFrameBuffers.size());
 
 	m_ImageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
 	m_RenderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
@@ -257,7 +257,7 @@ void App::Init()
 	m_ComputePipelines[2] = std::make_unique<VK::ComputePipeline>(computeIntegrateShader.get(), m_ComputePipelineLayout.get(), m_GlobalPipelineCache.get());
 
 	m_ComputeCommandPool = std::make_unique<VK::CommandPool>(VK::GraphicsContext::GetDevice()->GetQueueIndices().computeFamily.value());
-	m_ComputeCommandBufferHandle = m_ComputeCommandPool->AllocateCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+	m_ComputeCommandBuffers = std::make_unique<VK::CommandBuffers>(m_ComputeCommandPool.get(), 1);
 
 	std::array<glm::vec2, PARTICLE_NUM> initParticlePosition;
 	for (auto i = 0, x = 0, y = 0; i < PARTICLE_NUM; ++i)
@@ -353,7 +353,7 @@ void App::Update()
 	computeSubmitInfo.pWaitSemaphores = nullptr;
 	computeSubmitInfo.pWaitDstStageMask = 0;
 	computeSubmitInfo.commandBufferCount = 1;
-	computeSubmitInfo.pCommandBuffers = &m_ComputeCommandBufferHandle;
+	computeSubmitInfo.pCommandBuffers = m_ComputeCommandBuffers->GetVKCommandBuffers().data();
 	computeSubmitInfo.signalSemaphoreCount = 0;
 	computeSubmitInfo.pSignalSemaphores = nullptr;
 
@@ -362,42 +362,30 @@ void App::Update()
 }
 void App::Simulate()
 {
-	VkCommandBufferBeginInfo beginInfo{};
-	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	beginInfo.pNext = nullptr;
-	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
-	beginInfo.pInheritanceInfo = nullptr;
+	VkCommandBuffer commandBuffer = m_ComputeCommandBuffers->Begin(0);
 
-	VK_CHECK(vkBeginCommandBuffer(m_ComputeCommandBufferHandle, &beginInfo));
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_ComputePipelineLayout->GetVKPipelineLayoutHandle(), 0, 1, &m_ComputeDescriptorSetHandle, 0, nullptr);
 
-	vkCmdBindDescriptorSets(m_ComputeCommandBufferHandle, VK_PIPELINE_BIND_POINT_COMPUTE, m_ComputePipelineLayout->GetVKPipelineLayoutHandle(), 0, 1, &m_ComputeDescriptorSetHandle, 0, nullptr);
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_ComputePipelines[0]->GetVKPipelineHandle());
+	vkCmdDispatch(commandBuffer, WORK_GROUP_NUM, 1, 1);
+	vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 0, nullptr);
 
-	vkCmdBindPipeline(m_ComputeCommandBufferHandle, VK_PIPELINE_BIND_POINT_COMPUTE, m_ComputePipelines[0]->GetVKPipelineHandle());
-	vkCmdDispatch(m_ComputeCommandBufferHandle, WORK_GROUP_NUM, 1, 1);
-	vkCmdPipelineBarrier(m_ComputeCommandBufferHandle, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 0, nullptr);
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_ComputePipelines[1]->GetVKPipelineHandle());
+	vkCmdDispatch(commandBuffer, WORK_GROUP_NUM, 1, 1);
+	vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 0, nullptr);
 
-	vkCmdBindPipeline(m_ComputeCommandBufferHandle, VK_PIPELINE_BIND_POINT_COMPUTE, m_ComputePipelines[1]->GetVKPipelineHandle());
-	vkCmdDispatch(m_ComputeCommandBufferHandle, WORK_GROUP_NUM, 1, 1);
-	vkCmdPipelineBarrier(m_ComputeCommandBufferHandle, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 0, nullptr);
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_ComputePipelines[2]->GetVKPipelineHandle());
+	vkCmdDispatch(commandBuffer, WORK_GROUP_NUM, 1, 1);
+	vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 0, nullptr);
 
-	vkCmdBindPipeline(m_ComputeCommandBufferHandle, VK_PIPELINE_BIND_POINT_COMPUTE, m_ComputePipelines[2]->GetVKPipelineHandle());
-	vkCmdDispatch(m_ComputeCommandBufferHandle, WORK_GROUP_NUM, 1, 1);
-	vkCmdPipelineBarrier(m_ComputeCommandBufferHandle, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 0, nullptr);
-
-	VK_CHECK(vkEndCommandBuffer(m_ComputeCommandBufferHandle));
+	VK_CHECK(vkEndCommandBuffer(commandBuffer));
 }
 
 void App::Draw()
 {
-	for (size_t i = 0; i < m_GraphicsCommandBufferHandles.size(); ++i)
+	for (size_t i = 0; i < m_GraphicsCommandBuffers->GetVKCommandBuffers().size(); ++i)
 	{
-		VkCommandBufferBeginInfo commandBufferBeginInfo = {};
-		commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-		commandBufferBeginInfo.pNext = nullptr;
-		commandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
-		commandBufferBeginInfo.pInheritanceInfo = nullptr;
-
-		vkBeginCommandBuffer(m_GraphicsCommandBufferHandles[i], &commandBufferBeginInfo);
+		VkCommandBuffer commandBuffer = m_GraphicsCommandBuffers->Begin(i);
 
 		VkClearValue clearValue{0.0f, 0.0f, 0.0f, 1.0f};
 		VkRenderPassBeginInfo renderPassBeginInfo;
@@ -410,7 +398,7 @@ void App::Draw()
 		renderPassBeginInfo.clearValueCount = 1;
 		renderPassBeginInfo.pClearValues = &clearValue;
 
-		vkCmdBeginRenderPass(m_GraphicsCommandBufferHandles[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+		vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
 		VkViewport viewPort;
 		viewPort.x = 0;
@@ -424,15 +412,15 @@ void App::Draw()
 		scissor.extent = m_SwapChain->GetVKSwapChainExtent();
 		scissor.offset = {0, 0};
 
-		vkCmdSetViewport(m_GraphicsCommandBufferHandles[i], 0, 1, &viewPort);
-		vkCmdBindPipeline(m_GraphicsCommandBufferHandles[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline->GetVKPipelineHandle());
+		vkCmdSetViewport(commandBuffer, 0, 1, &viewPort);
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline->GetVKPipelineHandle());
 
 		VkDeviceSize offsets = 0;
-		vkCmdBindVertexBuffers(m_GraphicsCommandBufferHandles[i], 0, 1, &m_PackedParticlesBuffer->GetVKBufferHandle(), &offsets);
-		vkCmdDraw(m_GraphicsCommandBufferHandles[i], PARTICLE_NUM, 1, 0, 0);
-		vkCmdEndRenderPass(m_GraphicsCommandBufferHandles[i]);
+		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &m_PackedParticlesBuffer->GetVKBufferHandle(), &offsets);
+		vkCmdDraw(commandBuffer, PARTICLE_NUM, 1, 0, 0);
+		vkCmdEndRenderPass(commandBuffer);
 
-		VK_CHECK(vkEndCommandBuffer(m_GraphicsCommandBufferHandles[i]));
+		VK_CHECK(vkEndCommandBuffer(commandBuffer));
 	}
 }
 
@@ -448,6 +436,8 @@ void App::SubmitAndPresent()
 
 	m_InFlightFences[currentFrame]->Reset();
 
+	const VkPipelineStageFlags waitDstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
 	VkSubmitInfo graphicsSubmitInfo{};
 	graphicsSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 	graphicsSubmitInfo.pNext = nullptr;
@@ -455,7 +445,7 @@ void App::SubmitAndPresent()
 	graphicsSubmitInfo.pWaitSemaphores = &m_ImageAvailableSemaphores[currentFrame]->GetVKSemaphoreHandle();
 	graphicsSubmitInfo.pWaitDstStageMask = &waitDstStageMask;
 	graphicsSubmitInfo.commandBufferCount = 1;
-	graphicsSubmitInfo.pCommandBuffers = &m_GraphicsCommandBufferHandles[swapChainImageIdx];
+	graphicsSubmitInfo.pCommandBuffers = &m_GraphicsCommandBuffers->GetVKCommandBuffers()[swapChainImageIdx];
 	graphicsSubmitInfo.signalSemaphoreCount = 1;
 	graphicsSubmitInfo.pSignalSemaphores = &m_RenderFinishedSemaphores[currentFrame]->GetVKSemaphoreHandle();
 

@@ -12,14 +12,8 @@ namespace VK
 
         const VkCommandPool &GetVKCommandPoolHandle() const;
 
-        VkCommandBuffer AllocateCommandBuffer(VkCommandBufferLevel level);
-
-        std::vector<VkCommandBuffer> AllocateCommandBuffers(uint32_t count, VkCommandBufferLevel level);
-
     private:
         VkCommandPool m_CommandPoolHandle;
-
-        DeletionQueue m_DeletionQueue;
     };
 
 }
